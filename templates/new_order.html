@@ -1,0 +1,9 @@
+<h2>New Order Received</h2>
+<p>Hi {{ seller_name }},</p>
+<p>You have received a new order for <strong>{{ product_name }}</strong> (Qty: {{ quantity }})</p>
+<p>Amount: ${{ amount }}</p>
+<p>Buyer: {{ buyer_name }}</p>
+<p>Order Date: {{ order_date }}</p>
+{% if shipping_required %}
+<p>Shipping is required for this item.</p>
+{% endif %}

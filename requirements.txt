@@ -1,0 +1,25 @@
+# Core framework
+flask==3.0.3
+
+# Authentication & Security
+pyjwt==2.9.0
+flask-bcrypt==1.0.1
+
+# Database
+pymysql==1.1.1
+
+# CORS for frontend-backend comms
+flask-cors==5.0.0
+
+# Realtime features (chat, rides, notifications)
+flask-socketio==5.3.6
+eventlet==0.37.0
+
+# Email
+flask-mail==0.9.1
+
+# Environment variables
+python-dotenv==1.0.1
+
+# External API calls
+requests==2.32.3
