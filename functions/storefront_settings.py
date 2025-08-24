@@ -5,46 +5,46 @@ from extensions.extensions import get_db_connection
 
 storefront_settings_bp = Blueprint("storefront_settings", __name__)
 
-def create_table_if_not_exists():
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cur:
-            # Check if table exists
-            cur.execute("SHOW TABLES LIKE 'storefront_settings'")
-            if cur.fetchone() is None:
-                # Table does not exist, create it from scratch
-                cur.execute("""
-                    CREATE TABLE storefront_settings (
-                        storefront_id CHAR(36) NOT NULL PRIMARY KEY,
-                        low_stock_alert BOOLEAN DEFAULT TRUE,
-                        promotional_email_alert BOOLEAN DEFAULT TRUE,
-                        new_order_alerts BOOLEAN DEFAULT TRUE,
-                        storefront_design JSON
-                    )
-                """)
-            else:
-                # Table exists, check for storefront_id
-                cur.execute("SHOW COLUMNS FROM storefront_settings LIKE 'storefront_id'")
-                if not cur.fetchone():
-                    # First drop old primary key if exists
-                    cur.execute("SHOW COLUMNS FROM storefront_settings LIKE 'id'")
-                    if cur.fetchone():
-                        # Drop primary key constraint first
-                        cur.execute("ALTER TABLE storefront_settings DROP PRIMARY KEY")
-                        # Optionally drop old id column
-                        cur.execute("ALTER TABLE storefront_settings DROP COLUMN id")
+# def create_table_if_not_exists():
+#     conn = get_db_connection()
+#     try:
+#         with conn.cursor() as cur:
+#             # Check if table exists
+#             cur.execute("SHOW TABLES LIKE 'storefront_settings'")
+#             if cur.fetchone() is None:
+#                 # Table does not exist, create it from scratch
+#                 cur.execute("""
+#                     CREATE TABLE storefront_settings (
+#                         storefront_id CHAR(36) NOT NULL PRIMARY KEY,
+#                         low_stock_alert BOOLEAN DEFAULT TRUE,
+#                         promotional_email_alert BOOLEAN DEFAULT TRUE,
+#                         new_order_alerts BOOLEAN DEFAULT TRUE,
+#                         storefront_design JSON
+#                     )
+#                 """)
+#             else:
+#                 # Table exists, check for storefront_id
+#                 cur.execute("SHOW COLUMNS FROM storefront_settings LIKE 'storefront_id'")
+#                 if not cur.fetchone():
+#                     # First drop old primary key if exists
+#                     cur.execute("SHOW COLUMNS FROM storefront_settings LIKE 'id'")
+#                     if cur.fetchone():
+#                         # Drop primary key constraint first
+#                         cur.execute("ALTER TABLE storefront_settings DROP PRIMARY KEY")
+#                         # Optionally drop old id column
+#                         cur.execute("ALTER TABLE storefront_settings DROP COLUMN id")
                     
-                    # Now add storefront_id as UUID primary key
-                    cur.execute("""
-                        ALTER TABLE storefront_settings
-                        ADD COLUMN storefront_id CHAR(36) NOT NULL PRIMARY KEY
-                    """)
-            conn.commit()
-    finally:
-        conn.close()
+#                     # Now add storefront_id as UUID primary key
+#                     cur.execute("""
+#                         ALTER TABLE storefront_settings
+#                         ADD COLUMN storefront_id CHAR(36) NOT NULL PRIMARY KEY
+#                     """)
+#             conn.commit()
+#     finally:
+#         conn.close()
 
 
-create_table_if_not_exists()
+# create_table_if_not_exists()
 
 
 # GET settings for a storefront UUID
@@ -79,9 +79,18 @@ def update_settings(storefront_id):
             existing = cur.fetchone()
 
             if existing:
-                # Merge existing JSON with new updates
+                # Parse existing design JSON
                 existing_design = json.loads(existing.get("storefront_design") or "{}")
                 new_design = data.get("storefront_design") or {}
+
+                # Ensure new_design is a dict
+                if isinstance(new_design, str):
+                    try:
+                        new_design = json.loads(new_design)
+                    except json.JSONDecodeError:
+                        new_design = {}
+
+                # Merge
                 existing_design.update(new_design)
 
                 cur.execute("""
@@ -98,6 +107,7 @@ def update_settings(storefront_id):
                     json.dumps(existing_design),
                     storefront_id
                 ))
+
             else:
                 # Insert new row
                 cur.execute("""
