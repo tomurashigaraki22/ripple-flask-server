@@ -4,6 +4,9 @@ import pymysql
 import os
 from dotenv import load_dotenv
 from flask_mail import Mail, Message
+from xrpl.clients import JsonRpcClient
+from xrpl.models.transactions import Payment
+from xrpl.transaction import autofill
 
 # Load environment variables from .env file
 load_dotenv()
@@ -12,6 +15,11 @@ app = Flask(__name__)
 
 # ✅ Allow all origins for CORS
 CORS(app, resources={r"/*": {"origins": "*"}})
+
+client = JsonRpcClient("https://s.altnet.rippletest.net:51234")
+
+ESCROW_ADDRESS = "rpeh58KQ7cs76Aa2639LYT2hpw4D6yrSDq"        # replace with your escrow account
+ISSUER_ADDRESS = "rsEaYfqdZKNbD3SK55xzcjPm3nDrMj4aUT"        # issuer of XRPB
 
 # ✅ Database connection
 def get_db_connection():

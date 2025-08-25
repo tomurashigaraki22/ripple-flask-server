@@ -18,6 +18,8 @@ from functions.admin_listings import admin_listings_bp
 from functions.admin import admin_bp
 from functions.audit_trail import audit_bp
 from functions.admin_settings import admin_settings_bp
+# from functions.escrows import escrows_bp
+from functions.membership import membership_bp
 
 load_dotenv()
 
@@ -87,6 +89,8 @@ app.register_blueprint(admin_listings_bp, url_prefix="/admin/fetch")
 app.register_blueprint(admin_bp, url_prefix="/admin")
 app.register_blueprint(audit_bp, url_prefix="/admin/audit")
 app.register_blueprint(admin_settings_bp, url_prefix="/admin/settings")
+# app.register_blueprint(escrows_bp, url_prefix="/escrows")
+app.register_blueprint(membership_bp, url_prefix="/membership")
 
 if __name__ == "__main__":
     app.run(debug=True, host='0.0.0.0', port=1234, use_reloader=True)
