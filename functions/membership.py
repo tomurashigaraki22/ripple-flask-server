@@ -5,7 +5,7 @@ import pymysql
 from extensions.extensions import get_db_connection
 import json
 
-membership_bp = Blueprint("membership", __name__, url_prefix="/membership")
+membership_bp = Blueprint("membership", __name__)
 
 
 # Function to verify user access (not a decorator)
@@ -139,7 +139,6 @@ from email.mime.multipart import MIMEMultipart
 import os
 from functions.admin import generate_random_password  # You can create a helper for password generation
 
-membership_bp = Blueprint('membership', __name__)
 
 SMTP_HOST = 'smtp.gmail.com'
 SMTP_PORT = 587
