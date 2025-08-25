@@ -23,3 +23,5 @@ python-dotenv==1.0.1
 
 # External API calls
 requests==2.32.3
+
+xrpl-py
