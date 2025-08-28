@@ -43,7 +43,6 @@ def login():
         # ✅ Generate JWT token (24h expiration)
         payload = {
             "userId": user["id"],
-            "exp": datetime.utcnow() + timedelta(hours=24)
         }
         token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
