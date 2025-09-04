@@ -431,7 +431,7 @@ def create_storefront_listing():
         stock_quantity = data.get("stock_quantity")
         low_stock_threshold = data.get("low_stock_threshold")
         
-        shipping_from = data.get("shipping_from")
+        shipping_from = data.get("address")
         
         # Validate shipping_from
         if shipping_from is not None:
