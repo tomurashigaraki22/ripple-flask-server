@@ -62,6 +62,7 @@ def get_marketplace_listings():
                 l.tags,
                 l.views,
                 l.created_at,
+                l.shipping_from,
                 l.updated_at,
                 u.username as seller_username,
                 u.id as seller_id
@@ -101,6 +102,12 @@ def get_marketplace_listings():
                     listing["tags"] = json.loads(listing["tags"])
                 except:
                     listing["tags"] = []
+            if isinstance(listing.get("shipping_from"), str):
+                try:
+                    import json
+                    listing["shipping_from"] = json.loads(listing["shipping_from"])
+                except:
+                    listing["shipping_from"] = {}
 
         return jsonify({
             "listings": listings,
@@ -144,6 +151,7 @@ def get_listing(id):
                 l.low_stock_threshold,
                 l.is_physical,
                 l.is_auction,
+                l.shipping_from,
                 l.starting_bid,
                 l.current_bid,
                 l.bid_increment,
@@ -266,6 +274,7 @@ def get_listing(id):
             "features": parse_json_field(listing.get("features")),
             "specifications": parse_json_field(listing.get("specifications")),
             "shipping_info": parse_json_field(listing.get("shipping_info")),
+            "shipping_from": parse_json_field(listing.get("shipping_from")),
             "seller": {
                 "id": listing["seller_id"],
                 "username": listing["seller_username"],

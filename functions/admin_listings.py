@@ -64,6 +64,7 @@ def get_listings():
                 l.status,
                 l.views,
                 l.created_at,
+                l.shipping_from,
                 l.updated_at,
                 u.username AS seller,
                 u.email AS seller_email
@@ -85,6 +86,9 @@ def get_listings():
             if isinstance(l.get("tags"), str):
                 import json
                 l["tags"] = json.loads(l["tags"])
+            if isinstance(l.get("shipping_from"), str):
+                import json
+                l["shipping_from"] = json.loads(l["shipping_from"])
             l["image"] = l["images"][0] if l.get("images") and len(l["images"]) > 0 else None
             l["createdAt"] = l["created_at"]
             l["updatedAt"] = l["updated_at"]
