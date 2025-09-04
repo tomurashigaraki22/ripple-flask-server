@@ -435,15 +435,23 @@ def create_storefront_listing():
         
         # Validate shipping_from
         if shipping_from is not None:
-            if not isinstance(shipping_from, list):
-                return jsonify({"error": "shipping_from must be an array"}), 400
+            if not isinstance(shipping_from, dict):
+                return jsonify({"error": "shipping_from must be an object"}), 400
             
-            # Validate each location object
-            for location in shipping_from:
-                if not isinstance(location, dict):
-                    return jsonify({"error": "Each shipping location must be an object"}), 400
-                if "country" not in location:
-                    return jsonify({"error": "Each shipping location must have a country"}), 400
+            # Required fields
+            required_fields = ["street", "city", "state", "country", "zipCode", "phone"]
+            missing_fields = [field for field in required_fields if field not in shipping_from]
+            
+            if missing_fields:
+                return jsonify({
+                    "error": f"Missing required shipping fields: {', '.join(missing_fields)}"
+                }), 400
+            
+            # Validate data types
+            if not all(isinstance(shipping_from.get(field), str) for field in required_fields):
+                return jsonify({
+                    "error": "All shipping fields must be strings"
+                }), 400
 
         # Convert to JSON string if present
         shipping_from_json = json.dumps(shipping_from) if shipping_from is not None else None
@@ -639,6 +647,12 @@ def create_storefront_listing():
                 listing["tags"] = json.loads(listing["tags"])
             except Exception:
                 listing["tags"] = []
+
+        if isinstance(listing.get("shipping_from"), str):
+            try:
+                listing["shipping_from"] = json.loads(listing["shipping_from"])
+            except Exception:
+                listing["shipping_from"] = None
 
         return jsonify({
             "message": "Listing created successfully and is pending approval",
