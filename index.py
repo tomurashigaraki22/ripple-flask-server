@@ -22,6 +22,8 @@ from functions.admin_settings import admin_settings_bp
 from functions.escrows import escrows_bp
 from functions.membership import membership_bp
 from functions.orders import orders_bp
+import pymysql
+from extensions.extensions import get_db_connection
 
 load_dotenv()
 
@@ -75,6 +77,39 @@ def cloudinary_signature():
     except Exception as e:
         print("Signature generation error:", e)
         return jsonify({"error": "Failed to generate signature"}), 500
+
+@app.route("/admin/database/add-shipping-column", methods=["POST"])
+def add_shipping_column():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Check if column exists
+        cursor.execute("""
+            SELECT COUNT(*) AS count 
+            FROM information_schema.columns 
+            WHERE table_name = 'listings'
+            AND column_name = 'shipping_from'
+        """)
+        result = cursor.fetchone()
+        
+        if result['count'] == 0:
+            # Add the column if it doesn't exist
+            cursor.execute("""
+                ALTER TABLE listings 
+                ADD COLUMN shipping_from JSON NULL
+            """)
+            conn.commit()
+            return jsonify({"message": "shipping_from column added successfully"}), 200
+        else:
+            return jsonify({"message": "shipping_from column already exists"}), 200
+
+    except Exception as e:
+        print("Error adding shipping column:", str(e))
+        return jsonify({"error": "Failed to add shipping column"}), 500
+    finally:
+        cursor.close()
+        conn.close()
 
 # ✅ Register blueprint(s)
 app.register_blueprint(auth_bp, url_prefix="/auth")

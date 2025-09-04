@@ -430,6 +430,23 @@ def create_storefront_listing():
 
         stock_quantity = data.get("stock_quantity")
         low_stock_threshold = data.get("low_stock_threshold")
+        
+        shipping_from = data.get("shipping_from")
+        
+        # Validate shipping_from
+        if shipping_from is not None:
+            if not isinstance(shipping_from, list):
+                return jsonify({"error": "shipping_from must be an array"}), 400
+            
+            # Validate each location object
+            for location in shipping_from:
+                if not isinstance(location, dict):
+                    return jsonify({"error": "Each shipping location must be an object"}), 400
+                if "country" not in location:
+                    return jsonify({"error": "Each shipping location must have a country"}), 400
+
+        # Convert to JSON string if present
+        shipping_from_json = json.dumps(shipping_from) if shipping_from is not None else None
 
         is_auction = bool(data.get("is_auction"))
         starting_bid = data.get("starting_bid")
@@ -546,12 +563,12 @@ def create_storefront_listing():
                 (id, user_id, title, description, price, category, chain, is_physical, images, tags,
                  stock_quantity, original_stock, low_stock_threshold,
                  is_auction, starting_bid, current_bid, bid_increment, auction_end_date, buy_now_price,
-                 auction_status, status)
+                 auction_status, status, shipping_from)
                 VALUES
                 (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                  %s, %s, %s,
                  %s, %s, %s, %s, %s, %s,
-                 'active', 'pending')
+                 'active', 'pending', %s)
             """, (
                 listing_id,
                 user_id,
@@ -571,16 +588,17 @@ def create_storefront_listing():
                 float(starting_bid),  # current_bid starts at starting_bid
                 float(bid_increment or 10),
                 end_dt.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
-                float(buy_it_now_price) if buy_it_now_price is not None else None
+                float(buy_it_now_price) if buy_it_now_price is not None else None,
+                shipping_from_json
             ))
         else:
             cursor.execute("""
                 INSERT INTO listings
                 (id, user_id, title, description, price, category, chain, is_physical, images, tags,
-                 stock_quantity, original_stock, low_stock_threshold, status)
+                 stock_quantity, original_stock, low_stock_threshold, status, shipping_from)
                 VALUES
                 (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                 %s, %s, %s, 'pending')
+                 %s, %s, %s, 'pending', %s)
             """, (
                 listing_id,
                 user_id,
@@ -595,12 +613,13 @@ def create_storefront_listing():
                 stock_qty,
                 stock_qty,
                 int(low_stock_threshold or 5),
+                shipping_from_json
             ))
 
         # Fetch created listing
         cursor.execute("""
             SELECT id, title, description, price, category, chain, is_physical,
-                   images, tags, status, views, created_at, updated_at
+                   images, tags, status, views, created_at, updated_at, shipping_from
             FROM listings WHERE id = %s
         """, (listing_id,))
         listing = cursor.fetchone()
