@@ -22,6 +22,7 @@ from functions.admin_settings import admin_settings_bp
 from functions.escrows import escrows_bp
 from functions.membership import membership_bp
 from functions.orders import orders_bp
+from functions.storefronts import storefronts_bp
 import pymysql
 from extensions.extensions import get_db_connection
 
@@ -129,6 +130,7 @@ app.register_blueprint(admin_settings_bp, url_prefix="/admin/settings")
 app.register_blueprint(escrows_bp, url_prefix="/escrows")
 app.register_blueprint(membership_bp, url_prefix="/membership")
 app.register_blueprint(orders_bp, url_prefix="/orders")
+app.register_blueprint(storefronts_bp, url_prefix="/storefronts_bp")
 
 if __name__ == "__main__":
     # print(app.url_map)
