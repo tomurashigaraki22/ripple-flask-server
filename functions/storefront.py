@@ -347,17 +347,17 @@ def get_storefront_orders():
 def get_storefront_listings():
     """
     GET - Fetch user's listings
-    Query params: limit (default 20), offset (default 0), status, category
+    Query params: 
+        user_id (required): ID of the user whose listings to fetch
+        limit (default 20): Number of listings per page
+        offset (default 0): Pagination offset
+        status: Filter by listing status
+        category: Filter by category
     """
     try:
-        user_or_error = verify_storefront_access_func()
-    
-        # Check if it returned an error
-        if isinstance(user_or_error, tuple):
-            return user_or_error
-
-        user = user_or_error
-        user_id = user["id"]
+        user_id = request.args.get("user_id")
+        if not user_id:
+            return jsonify({"error": "user_id is required"}), 400
 
         limit = int(request.args.get("limit", 20))
         offset = int(request.args.get("offset", 0))
@@ -376,25 +376,78 @@ def get_storefront_listings():
             params.append(category)
 
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)  # Use DictCursor for better response format
 
+        # Get total count for pagination
+        cursor.execute(f"""
+            SELECT COUNT(*) as total
+            FROM listings
+            {where_clause}
+        """, params)
+        total = cursor.fetchone()["total"]
+        total_pages = (total + limit - 1) // limit
+
+        # Fetch listings with pagination
         cursor.execute(f"""
             SELECT id, title, description, price, category, chain, is_physical,
-                   images, tags, status, views, created_at, updated_at
+                   images, tags, status, views, created_at, updated_at, shipping_from,
+                   stock_quantity, original_stock, low_stock_threshold,
+                   is_auction, starting_bid, current_bid, bid_increment, auction_end_date, buy_now_price
             FROM listings
             {where_clause}
             ORDER BY created_at DESC
             LIMIT %s OFFSET %s
         """, params + [limit, offset])
 
-        rows = cursor.fetchall()
+        listings = cursor.fetchall()
 
         cursor.close()
         conn.close()
 
+        # Parse JSON fields
+        for listing in listings:
+            # Parse images
+            if isinstance(listing.get("images"), str):
+                try:
+                    listing["images"] = json.loads(listing["images"])
+                except Exception:
+                    listing["images"] = []
+            
+            # Parse tags
+            if isinstance(listing.get("tags"), str):
+                try:
+                    listing["tags"] = json.loads(listing["tags"])
+                except Exception:
+                    listing["tags"] = []
 
+            # Parse shipping_from
+            if isinstance(listing.get("shipping_from"), str):
+                try:
+                    listing["shipping_from"] = json.loads(listing["shipping_from"])
+                except Exception:
+                    listing["shipping_from"] = None
 
-        return jsonify({"listings": rows}), 200
+            # Convert price to float
+            if "price" in listing:
+                listing["price"] = float(listing["price"])
+
+            # Convert numeric fields
+            numeric_fields = ["starting_bid", "current_bid", "bid_increment", "buy_now_price"]
+            for field in numeric_fields:
+                if field in listing and listing[field] is not None:
+                    listing[field] = float(listing[field])
+
+        return jsonify({
+            "listings": listings,
+            "pagination": {
+                "total": total,
+                "totalPages": total_pages,
+                "currentPage": (offset // limit) + 1,
+                "limit": limit,
+                "hasMore": offset + limit < total,
+                "hasPrevious": offset > 0
+            }
+        }), 200
 
     except Exception as e:
         print("Error fetching listings:", e)
