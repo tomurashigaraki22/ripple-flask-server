@@ -260,6 +260,50 @@ def delete_service(service_id):
         print("Error deleting service:", e)
         return jsonify({"error": "Internal server error"}), 500
 
+@storefronts_bp.route("/services/<storefront_id>", methods=["GET"])
+def get_services(storefront_id):
+    """Get all services for a storefront"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        
+        cursor.execute("""
+            SELECT id, title, description, price_text, starting_price,
+                   features, category, is_active, created_at, updated_at
+            FROM services 
+            WHERE storefront_id = %s AND is_active = TRUE
+            ORDER BY created_at DESC
+        """, (storefront_id,))
+        
+        services = cursor.fetchall()
+        
+        # Parse features JSON
+        for service in services:
+            if isinstance(service.get("features"), str):
+                try:
+                    service["features"] = json.loads(service["features"])
+                except Exception:
+                    service["features"] = []
+            
+            # Convert price to float if present
+            if service.get("starting_price"):
+                service["starting_price"] = float(service["starting_price"])
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "services": services
+        }), 200
+        
+    except Exception as e:
+        print("Error fetching services:", e)
+        return jsonify({
+            "success": False,
+            "error": "Internal server error"
+        }), 500
+
 # Theme Routes
 @storefronts_bp.route("/themes", methods=["POST"])
 def create_theme():
