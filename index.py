@@ -130,7 +130,7 @@ app.register_blueprint(admin_settings_bp, url_prefix="/admin/settings")
 app.register_blueprint(escrows_bp, url_prefix="/escrows")
 app.register_blueprint(membership_bp, url_prefix="/membership")
 app.register_blueprint(orders_bp, url_prefix="/orders")
-app.register_blueprint(storefronts_bp, url_prefix="/storefronts_bp")
+app.register_blueprint(storefronts_bp, url_prefix="/storefronts")
 
 if __name__ == "__main__":
     # print(app.url_map)
