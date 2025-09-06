@@ -101,6 +101,50 @@ def get_profile(storefront_id):
         print("Error fetching profile:", e)
         return jsonify({"error": "Internal server error"}), 500
 
+@storefronts_bp.route("/profile/<storefront_id>", methods=["PUT"])
+def update_profile(storefront_id):
+    try:
+        data = request.get_json()
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        update_fields = []
+        params = []
+        
+        # Dynamically build update query based on provided fields
+        for field in ["name", "title", "bio", "avatar", "cover_image", 
+                     "location", "email", "phone"]:
+            if field in data:
+                update_fields.append(f"{field} = %s")
+                params.append(data[field])
+        
+        if not update_fields:
+            return jsonify({"error": "No fields to update"}), 400
+            
+        params.append(storefront_id)
+        
+        query = f"""
+            UPDATE user_profiles 
+            SET {", ".join(update_fields)}
+            WHERE storefront_id = %s
+        """
+        
+        cursor.execute(query, params)
+        conn.commit()
+        
+        if cursor.rowcount == 0:
+            return jsonify({"error": "Profile not found"}), 404
+            
+        cursor.close()
+        conn.close()
+        
+        return jsonify({"message": "Profile updated successfully"}), 200
+        
+    except Exception as e:
+        print("Error updating profile:", e)
+        return jsonify({"error": "Internal server error"}), 500
+
 # Services Routes
 @storefronts_bp.route("/services", methods=["POST"])
 def create_service():
@@ -145,6 +189,74 @@ def create_service():
         
     except Exception as e:
         print("Error creating service:", e)
+        return jsonify({"error": "Internal server error"}), 500
+
+@storefronts_bp.route("/services/<int:service_id>", methods=["PUT"])
+def update_service(service_id):
+    try:
+        data = request.get_json()
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        update_fields = []
+        params = []
+        
+        for field in ["title", "description", "price_text", "starting_price", 
+                     "features", "category", "is_active"]:
+            if field in data:
+                if field == "features":
+                    update_fields.append("features = %s")
+                    params.append(json.dumps(data[field]))
+                else:
+                    update_fields.append(f"{field} = %s")
+                    params.append(data[field])
+        
+        if not update_fields:
+            return jsonify({"error": "No fields to update"}), 400
+            
+        params.append(service_id)
+        
+        query = f"""
+            UPDATE services 
+            SET {", ".join(update_fields)}
+            WHERE id = %s
+        """
+        
+        cursor.execute(query, params)
+        conn.commit()
+        
+        if cursor.rowcount == 0:
+            return jsonify({"error": "Service not found"}), 404
+            
+        cursor.close()
+        conn.close()
+        
+        return jsonify({"message": "Service updated successfully"}), 200
+        
+    except Exception as e:
+        print("Error updating service:", e)
+        return jsonify({"error": "Internal server error"}), 500
+
+@storefronts_bp.route("/services/<int:service_id>", methods=["DELETE"])
+def delete_service(service_id):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("DELETE FROM services WHERE id = %s", (service_id,))
+        conn.commit()
+        
+        if cursor.rowcount == 0:
+            return jsonify({"error": "Service not found"}), 404
+            
+        cursor.close()
+        conn.close()
+        
+        return jsonify({"message": "Service deleted successfully"}), 200
+        
+    except Exception as e:
+        print("Error deleting service:", e)
         return jsonify({"error": "Internal server error"}), 500
 
 # Theme Routes
@@ -197,4 +309,107 @@ def create_theme():
         
     except Exception as e:
         print("Error creating theme:", e)
+        return jsonify({"error": "Internal server error"}), 500
+
+# Social Links CRUD
+@storefronts_bp.route("/social-links", methods=["POST"])
+def create_social_link():
+    try:
+        data = request.get_json()
+        required_fields = ["owner_id", "storefront_id", "platform", "url"]
+        
+        if not all(field in data for field in required_fields):
+            return jsonify({"error": "Missing required fields"}), 400
+            
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            INSERT INTO social_media_links 
+            (owner_id, storefront_id, platform, url, is_active)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (
+            data["owner_id"],
+            data["storefront_id"],
+            data["platform"],
+            data["url"],
+            data.get("is_active", True)
+        ))
+        
+        conn.commit()
+        link_id = cursor.lastrowid
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            "message": "Social link created successfully",
+            "link_id": link_id
+        }), 201
+        
+    except Exception as e:
+        print("Error creating social link:", e)
+        return jsonify({"error": "Internal server error"}), 500
+
+@storefronts_bp.route("/social-links/<int:link_id>", methods=["PUT"])
+def update_social_link(link_id):
+    try:
+        data = request.get_json()
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        update_fields = []
+        params = []
+        
+        for field in ["platform", "url", "is_active"]:
+            if field in data:
+                update_fields.append(f"{field} = %s")
+                params.append(data[field])
+        
+        if not update_fields:
+            return jsonify({"error": "No fields to update"}), 400
+            
+        params.append(link_id)
+        
+        query = f"""
+            UPDATE social_media_links 
+            SET {", ".join(update_fields)}
+            WHERE id = %s
+        """
+        
+        cursor.execute(query, params)
+        conn.commit()
+        
+        if cursor.rowcount == 0:
+            return jsonify({"error": "Social link not found"}), 404
+            
+        cursor.close()
+        conn.close()
+        
+        return jsonify({"message": "Social link updated successfully"}), 200
+        
+    except Exception as e:
+        print("Error updating social link:", e)
+        return jsonify({"error": "Internal server error"}), 500
+
+@storefronts_bp.route("/social-links/<int:link_id>", methods=["DELETE"])
+def delete_social_link(link_id):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("DELETE FROM social_media_links WHERE id = %s", (link_id,))
+        conn.commit()
+        
+        if cursor.rowcount == 0:
+            return jsonify({"error": "Social link not found"}), 404
+            
+        cursor.close()
+        conn.close()
+        
+        return jsonify({"message": "Social link deleted successfully"}), 200
+        
+    except Exception as e:
+        print("Error deleting social link:", e)
         return jsonify({"error": "Internal server error"}), 500
