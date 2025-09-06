@@ -568,3 +568,210 @@ def delete_music_widget(widget_id):
     except Exception as e:
         print("Error deleting music widget:", e)
         return jsonify({"error": "Internal server error"}), 500
+
+# Skills Routes
+@storefronts_bp.route("/skills", methods=["POST"])
+def create_skill():
+    """Create a new skill"""
+    try:
+        data = request.get_json()
+        required_fields = ["owner_id", "storefront_id", "skill_name", "skill_level"]
+        
+        if not all(field in data for field in required_fields):
+            return jsonify({"error": "Missing required fields"}), 400
+            
+        # Validate skill level
+        skill_level = int(data.get("skill_level", 0))
+        if not 0 <= skill_level <= 100:
+            return jsonify({"error": "Skill level must be between 0 and 100"}), 400
+            
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get max display order for this storefront
+        cursor.execute("""
+            SELECT COALESCE(MAX(display_order), 0) as max_order 
+            FROM storefront_skills 
+            WHERE storefront_id = %s
+        """, (data["storefront_id"],))
+        max_order = cursor.fetchone()[0]
+        
+        cursor.execute("""
+            INSERT INTO storefront_skills 
+            (owner_id, storefront_id, skill_name, skill_level, category,
+             years_experience, is_featured, display_order)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """, (
+            data["owner_id"],
+            data["storefront_id"],
+            data["skill_name"],
+            skill_level,
+            data.get("category"),
+            data.get("years_experience"),
+            bool(data.get("is_featured", False)),
+            max_order + 1
+        ))
+        
+        conn.commit()
+        skill_id = cursor.lastrowid
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            "message": "Skill created successfully",
+            "skill_id": skill_id
+        }), 201
+        
+    except Exception as e:
+        print("Error creating skill:", e)
+        return jsonify({"error": "Internal server error"}), 500
+
+@storefronts_bp.route("/skills/<storefront_id>", methods=["GET"])
+def get_skills(storefront_id):
+    """Get all skills for a storefront"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        
+        cursor.execute("""
+            SELECT id, skill_name, skill_level, category, years_experience,
+                   is_featured, display_order, created_at, updated_at
+            FROM storefront_skills 
+            WHERE storefront_id = %s
+            ORDER BY is_featured DESC, display_order ASC
+        """, (storefront_id,))
+        
+        skills = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "skills": skills
+        }), 200
+        
+    except Exception as e:
+        print("Error fetching skills:", e)
+        return jsonify({
+            "success": False,
+            "error": "Internal server error"
+        }), 500
+
+@storefronts_bp.route("/skills/<int:skill_id>", methods=["PUT"])
+def update_skill(skill_id):
+    """Update a skill"""
+    try:
+        data = request.get_json()
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        update_fields = []
+        params = []
+        
+        # Fields that can be updated
+        for field in ["skill_name", "skill_level", "category", 
+                     "years_experience", "is_featured", "display_order"]:
+            if field in data:
+                if field == "skill_level":
+                    level = int(data[field])
+                    if not 0 <= level <= 100:
+                        return jsonify({"error": "Skill level must be between 0 and 100"}), 400
+                update_fields.append(f"{field} = %s")
+                params.append(data[field])
+        
+        if not update_fields:
+            return jsonify({"error": "No fields to update"}), 400
+            
+        params.append(skill_id)
+        
+        query = f"""
+            UPDATE storefront_skills 
+            SET {", ".join(update_fields)}
+            WHERE id = %s
+        """
+        
+        cursor.execute(query, params)
+        conn.commit()
+        
+        if cursor.rowcount == 0:
+            return jsonify({"error": "Skill not found"}), 404
+            
+        cursor.close()
+        conn.close()
+        
+        return jsonify({"message": "Skill updated successfully"}), 200
+        
+    except Exception as e:
+        print("Error updating skill:", e)
+        return jsonify({"error": "Internal server error"}), 500
+
+@storefronts_bp.route("/skills/<int:skill_id>", methods=["DELETE"])
+def delete_skill(skill_id):
+    """Delete a skill"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # First get the skill's storefront_id and display_order
+        cursor.execute("""
+            SELECT storefront_id, display_order 
+            FROM storefront_skills 
+            WHERE id = %s
+        """, (skill_id,))
+        skill = cursor.fetchone()
+        
+        if not skill:
+            return jsonify({"error": "Skill not found"}), 404
+            
+        # Delete the skill
+        cursor.execute("DELETE FROM storefront_skills WHERE id = %s", (skill_id,))
+        
+        # Update display_order for remaining skills
+        cursor.execute("""
+            UPDATE storefront_skills 
+            SET display_order = display_order - 1
+            WHERE storefront_id = %s 
+            AND display_order > %s
+        """, (skill[0], skill[1]))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        return jsonify({"message": "Skill deleted successfully"}), 200
+        
+    except Exception as e:
+        print("Error deleting skill:", e)
+        return jsonify({"error": "Internal server error"}), 500
+
+@storefronts_bp.route("/skills/reorder", methods=["POST"])
+def reorder_skills():
+    """Reorder skills"""
+    try:
+        data = request.get_json()
+        if not data or "skills" not in data:
+            return jsonify({"error": "Missing skills array"}), 400
+            
+        skills = data["skills"]  # Array of {id: number, display_order: number}
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        for skill in skills:
+            cursor.execute("""
+                UPDATE storefront_skills 
+                SET display_order = %s
+                WHERE id = %s
+            """, (skill["display_order"], skill["id"]))
+            
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        return jsonify({"message": "Skills reordered successfully"}), 200
+        
+    except Exception as e:
+        print("Error reordering skills:", e)
+        return jsonify({"error": "Internal server error"}), 500
