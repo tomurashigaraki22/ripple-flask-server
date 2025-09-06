@@ -633,6 +633,7 @@ def get_skills(storefront_id):
     try:
         conn = get_db_connection()
         cursor = conn.cursor(pymysql.cursors.DictCursor)
+        print(f"testing here")
         
         cursor.execute("""
             SELECT id, skill_name, skill_level, category, years_experience,
