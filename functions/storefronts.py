@@ -3,6 +3,7 @@ from extensions.extensions import get_db_connection
 from datetime import datetime
 import json
 from uuid import uuid4
+import pymysql
 
 storefronts_bp = Blueprint('storefronts', __name__)
 
@@ -311,90 +312,62 @@ def create_theme():
         print("Error creating theme:", e)
         return jsonify({"error": "Internal server error"}), 500
 
-# Social Links CRUD
-@storefronts_bp.route("/social-links", methods=["POST"])
-def create_social_link():
+@storefronts_bp.route("/themes/<storefront_id>", methods=["GET"])
+def get_themes(storefront_id):
+    """Get all themes for a storefront"""
     try:
-        data = request.get_json()
-        required_fields = ["owner_id", "storefront_id", "platform", "url"]
-        
-        if not all(field in data for field in required_fields):
-            return jsonify({"error": "Missing required fields"}), 400
-            
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
         
         cursor.execute("""
-            INSERT INTO social_media_links 
-            (owner_id, storefront_id, platform, url, is_active)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (
-            data["owner_id"],
-            data["storefront_id"],
-            data["platform"],
-            data["url"],
-            data.get("is_active", True)
-        ))
+            SELECT id, name, primary_color, secondary_color, accent_color, 
+                   is_active, is_preset, created_at, updated_at
+            FROM gradient_themes 
+            WHERE storefront_id = %s
+            ORDER BY is_active DESC, created_at DESC
+        """, (storefront_id,))
         
-        conn.commit()
-        link_id = cursor.lastrowid
-        
+        themes = cursor.fetchall()
         cursor.close()
         conn.close()
         
         return jsonify({
-            "message": "Social link created successfully",
-            "link_id": link_id
-        }), 201
+            "themes": themes
+        }), 200
         
     except Exception as e:
-        print("Error creating social link:", e)
+        print("Error fetching themes:", e)
         return jsonify({"error": "Internal server error"}), 500
 
-@storefronts_bp.route("/social-links/<int:link_id>", methods=["PUT"])
-def update_social_link(link_id):
+@storefronts_bp.route("/social-links/<storefront_id>", methods=["GET"])
+def get_social_links(storefront_id):
+    """Get all social links for a storefront"""
     try:
-        data = request.get_json()
-        
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
         
-        update_fields = []
-        params = []
+        cursor.execute("""
+            SELECT id, platform, url, is_active, created_at
+            FROM social_media_links
+            WHERE storefront_id = %s AND is_active = TRUE
+            ORDER BY created_at DESC
+        """, (storefront_id,))
         
-        for field in ["platform", "url", "is_active"]:
-            if field in data:
-                update_fields.append(f"{field} = %s")
-                params.append(data[field])
-        
-        if not update_fields:
-            return jsonify({"error": "No fields to update"}), 400
-            
-        params.append(link_id)
-        
-        query = f"""
-            UPDATE social_media_links 
-            SET {", ".join(update_fields)}
-            WHERE id = %s
-        """
-        
-        cursor.execute(query, params)
-        conn.commit()
-        
-        if cursor.rowcount == 0:
-            return jsonify({"error": "Social link not found"}), 404
-            
+        social_links = cursor.fetchall()
         cursor.close()
         conn.close()
         
-        return jsonify({"message": "Social link updated successfully"}), 200
+        return jsonify({
+            "social_links": social_links
+        }), 200
         
     except Exception as e:
-        print("Error updating social link:", e)
+        print("Error fetching social links:", e)
         return jsonify({"error": "Internal server error"}), 500
 
 @storefronts_bp.route("/social-links/<int:link_id>", methods=["DELETE"])
 def delete_social_link(link_id):
+    """Delete a social media link"""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -412,4 +385,142 @@ def delete_social_link(link_id):
         
     except Exception as e:
         print("Error deleting social link:", e)
+        return jsonify({"error": "Internal server error"}), 500
+
+@storefronts_bp.route("/music-widgets/<storefront_id>", methods=["GET"])
+def get_music_widgets(storefront_id):
+    """Get all music widgets for a storefront"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        
+        cursor.execute("""
+            SELECT id, widget_type, widget_url, is_active, created_at, updated_at
+            FROM music_widget_settings
+            WHERE storefront_id = %s AND is_active = TRUE
+            ORDER BY created_at DESC
+        """, (storefront_id,))
+        
+        widgets = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            "music_widgets": widgets
+        }), 200
+        
+    except Exception as e:
+        print("Error fetching music widgets:", e)
+        return jsonify({"error": "Internal server error"}), 500
+
+# Add CRUD operations for music widgets
+@storefronts_bp.route("/music-widgets", methods=["POST"])
+def create_music_widget():
+    """Create a new music widget"""
+    try:
+        data = request.get_json()
+        required_fields = ["owner_id", "storefront_id", "widget_type", "widget_url"]
+        
+        if not all(field in data for field in required_fields):
+            return jsonify({"error": "Missing required fields"}), 400
+            
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Validate widget_type
+        if data["widget_type"] not in ["spotify", "soundcloud"]:
+            return jsonify({"error": "Invalid widget_type. Must be 'spotify' or 'soundcloud'"}), 400
+        
+        cursor.execute("""
+            INSERT INTO music_widget_settings 
+            (owner_id, storefront_id, widget_type, widget_url, is_active)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (
+            data["owner_id"],
+            data["storefront_id"],
+            data["widget_type"],
+            data["widget_url"],
+            data.get("is_active", True)
+        ))
+        
+        conn.commit()
+        widget_id = cursor.lastrowid
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            "message": "Music widget created successfully",
+            "widget_id": widget_id
+        }), 201
+        
+    except Exception as e:
+        print("Error creating music widget:", e)
+        return jsonify({"error": "Internal server error"}), 500
+
+@storefronts_bp.route("/music-widgets/<int:widget_id>", methods=["PUT"])
+def update_music_widget(widget_id):
+    """Update a music widget"""
+    try:
+        data = request.get_json()
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        update_fields = []
+        params = []
+        
+        for field in ["widget_type", "widget_url", "is_active"]:
+            if field in data:
+                if field == "widget_type" and data[field] not in ["spotify", "soundcloud"]:
+                    return jsonify({"error": "Invalid widget_type. Must be 'spotify' or 'soundcloud'"}), 400
+                update_fields.append(f"{field} = %s")
+                params.append(data[field])
+        
+        if not update_fields:
+            return jsonify({"error": "No fields to update"}), 400
+            
+        params.append(widget_id)
+        
+        query = f"""
+            UPDATE music_widget_settings 
+            SET {", ".join(update_fields)}
+            WHERE id = %s
+        """
+        
+        cursor.execute(query, params)
+        conn.commit()
+        
+        if cursor.rowcount == 0:
+            return jsonify({"error": "Music widget not found"}), 404
+            
+        cursor.close()
+        conn.close()
+        
+        return jsonify({"message": "Music widget updated successfully"}), 200
+        
+    except Exception as e:
+        print("Error updating music widget:", e)
+        return jsonify({"error": "Internal server error"}), 500
+
+@storefronts_bp.route("/music-widgets/<int:widget_id>", methods=["DELETE"])
+def delete_music_widget(widget_id):
+    """Delete a music widget"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("DELETE FROM music_widget_settings WHERE id = %s", (widget_id,))
+        conn.commit()
+        
+        if cursor.rowcount == 0:
+            return jsonify({"error": "Music widget not found"}), 404
+            
+        cursor.close()
+        conn.close()
+        
+        return jsonify({"message": "Music widget deleted successfully"}), 200
+        
+    except Exception as e:
+        print("Error deleting music widget:", e)
         return jsonify({"error": "Internal server error"}), 500
