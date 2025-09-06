@@ -128,7 +128,7 @@ def update_profile(storefront_id):
         query = f"""
             UPDATE user_profiles 
             SET {", ".join(update_fields)}
-            WHERE storefront_id = %s
+            WHERE owner_id = %s
         """
         
         cursor.execute(query, params)
