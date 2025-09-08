@@ -23,8 +23,14 @@ from functions.escrows import escrows_bp
 from functions.membership import membership_bp
 from functions.orders import orders_bp
 from functions.storefronts import storefronts_bp
+from functions.storefront_notifications import storefront_notifications_bp
 import pymysql
 from extensions.extensions import get_db_connection
+
+from datetime import datetime
+from flask_mail import Message
+from extensions.extensions import mail, get_db_connection
+from io import StringIO
 
 load_dotenv()
 
@@ -112,6 +118,110 @@ def add_shipping_column():
         cursor.close()
         conn.close()
 
+@app.route("/admin/database/dump", methods=["POST"])
+def dump_database():
+    """Generate database dump and email it"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+            
+        cursor = conn.cursor()
+        
+        # Get all tables
+        cursor.execute("SHOW TABLES")
+        tables = [table.values()[0] for table in cursor.fetchall()]
+        
+        # Create string buffer for SQL content
+        sql_content = StringIO()
+        
+        # Write header
+        sql_content.write("-- RippleBids Database Dump\n")
+        sql_content.write(f"-- Generated: {datetime.now()}\n\n")
+        sql_content.write("SET NAMES utf8mb4;\n")
+        sql_content.write("SET FOREIGN_KEY_CHECKS = 0;\n\n")
+        
+        # Dump each table
+        for table in tables:
+            # Get table creation SQL
+            cursor.execute(f"SHOW CREATE TABLE {table}")
+            create_table = cursor.fetchone()['Create Table']
+            
+            sql_content.write(f"-- Table structure for {table}\n")
+            sql_content.write(f"DROP TABLE IF EXISTS `{table}`;\n")
+            sql_content.write(create_table + ";\n\n")
+            
+            # Get table data
+            cursor.execute(f"SELECT * FROM {table}")
+            rows = cursor.fetchall()
+            
+            if rows:
+                # Get column names
+                columns = rows[0].keys()
+                columns_str = ', '.join(f"`{col}`" for col in columns)
+                
+                sql_content.write(f"-- Data for {table}\n")
+                
+                # Process rows in batches of 1000
+                batch_size = 1000
+                for i in range(0, len(rows), batch_size):
+                    batch = rows[i:i + batch_size]
+                    values = []
+                    
+                    for row in batch:
+                        row_values = []
+                        for column in columns:
+                            value = row[column]
+                            if value is None:
+                                row_values.append('NULL')
+                            elif isinstance(value, (int, float)):
+                                row_values.append(str(value))
+                            elif isinstance(value, (datetime, datetime.date)):
+                                row_values.append(f"'{value.strftime('%Y-%m-%d %H:%M:%S')}'")
+                            else:
+                                # Escape single quotes in strings
+                                row_values.append(f"'{str(value).replace('\'', '\'\'')}'")
+                        values.append(f"({', '.join(row_values)})")
+                    
+                    sql_content.write(f"INSERT INTO `{table}` ({columns_str}) VALUES\n")
+                    sql_content.write(',\n'.join(values) + ";\n")
+                
+                sql_content.write("\n")
+        
+        # Reset settings
+        sql_content.write("SET FOREIGN_KEY_CHECKS = 1;\n")
+        
+        # Close database connection
+        cursor.close()
+        conn.close()
+        
+        # Create email with attachment
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        msg = Message(
+            subject=f"RippleBids Database Dump - {timestamp}",
+            recipients=["devtomiwa9@gmail.com"],
+            body=f"Please find attached the database dump generated on {datetime.now()}"
+        )
+        
+        # Attach SQL file
+        msg.attach(
+            f"database_dump_{timestamp}.sql",
+            "text/plain",
+            sql_content.getvalue()
+        )
+        
+        # Send email
+        mail.send(msg)
+        
+        return jsonify({
+            "message": "Database dump generated and emailed successfully",
+            "timestamp": timestamp
+        }), 200
+        
+    except Exception as e:
+        print("Error generating database dump:", str(e))
+        return jsonify({"error": "Failed to generate database dump"}), 500
+
 # ✅ Register blueprint(s)
 app.register_blueprint(auth_bp, url_prefix="/auth")
 app.register_blueprint(user_bp, url_prefix="/user")
@@ -131,6 +241,7 @@ app.register_blueprint(escrows_bp, url_prefix="/escrows")
 app.register_blueprint(membership_bp, url_prefix="/membership")
 app.register_blueprint(orders_bp, url_prefix="/orders")
 app.register_blueprint(storefronts_bp, url_prefix="/storefronts")
+app.register_blueprint(storefront_notifications_bp, url_prefix="/notifications")
 
 if __name__ == "__main__":
     # print(app.url_map)
