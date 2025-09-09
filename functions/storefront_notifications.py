@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, render_template
 import pymysql
 import jwt
 import os
@@ -19,6 +19,10 @@ JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key")
 def create_notifications_table():
     try:
         conn = get_db_connection()
+        if conn is None:
+            print("❌ Failed to get database connection")
+            return
+            
         cursor = conn.cursor()
         
         create_table_query = """
@@ -50,27 +54,45 @@ def create_notifications_table():
 # Initialize table on import
 create_notifications_table()
 
-# Helper function to send email notifications
+# Helper function to send email notifications with HTML template
 def send_email_notification(to_email, title, description, from_user_name=None):
     try:
-        subject = f"RippleBids Notification: {title}"
-        body = f"""
+        # Format timestamp
+        timestamp = datetime.now().strftime("%B %d, %Y at %I:%M %p")
+        
+        # Render HTML template
+        html_body = render_template(
+            'notification_email.html',
+            title=title,
+            description=description,
+            from_user_name=from_user_name,
+            timestamp=timestamp
+        )
+        
+        # Create plain text fallback
+        text_body = f"""
         Hello,
         
-        You have received a new notification:
+        You have received a new notification on RippleBids:
         
         Title: {title}
         Message: {description}
         {f'From: {from_user_name}' if from_user_name else ''}
+        Time: {timestamp}
+        
+        Visit our site: https://ripplebids.com
         
         Best regards,
         RippleBids Team
         """
         
+        subject = f"🌊 RippleBids: {title}"
+        
         msg = Message(
             subject=subject,
             recipients=[to_email],
-            body=body
+            body=text_body,
+            html=html_body
         )
         
         mail.send(msg)
@@ -113,6 +135,9 @@ def create_notification():
             return jsonify({"error": "Email parameter must be a boolean value"}), 400
         
         conn = get_db_connection()
+        if conn is None:
+            return jsonify({"error": "Database connection failed"}), 500
+            
         cursor = conn.cursor()
         
         # Insert notification
@@ -142,10 +167,10 @@ def create_notification():
                 sender_query = "SELECT username FROM users WHERE id = %s"
                 cursor.execute(sender_query, (from_user_id,))
                 sender_data = cursor.fetchone()
-                sender_name = sender_data.get('username') if sender_data else None
+                sender_name = sender_data[1] if sender_data else None
                 
                 send_email_notification(
-                    user_data.get('email'), 
+                    user_data[0],  # email
                     title, 
                     description, 
                     sender_name
