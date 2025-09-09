@@ -40,9 +40,13 @@ def login():
         if not bcrypt.checkpw(password.encode("utf-8"), user["password"].encode("utf-8")):
             return jsonify({"error": "Invalid credentials"}), 401
 
-        # ✅ Generate JWT token (24h expiration)
+        # ✅ Generate JWT token with new payload structure
         payload = {
-            "userId": user["id"],
+            "id": user["id"],
+            "email": user["email"],
+            "username": user["username"],
+            "iat": datetime.utcnow(),
+            "exp": datetime.utcnow() + timedelta(days=7)  # 7 day expiry
         }
         token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
@@ -106,10 +110,23 @@ def register():
                 )
                 new_user = cursor.fetchone()
 
+                # ✅ Generate JWT token for new user
+                payload = {
+                    "id": new_user["id"],
+                    "email": new_user["email"],
+                    "username": new_user["username"],
+                    "iat": datetime.utcnow(),
+                    "exp": datetime.utcnow() + timedelta(days=7)  # 7 day expiry
+                }
+                token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+
         finally:
             conn.close()
 
-        return jsonify(new_user), 200
+        return jsonify({
+            "user": new_user,
+            "token": token
+        }), 200
 
     except Exception as e:
         print("Registration error:", e)

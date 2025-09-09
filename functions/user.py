@@ -5,6 +5,9 @@ import os
 
 user_bp = Blueprint('user', __name__)
 
+# Add JWT_SECRET with fallback
+JWT_SECRET = os.getenv("JWT_SECRET", "supersecret")
+
 @user_bp.route("/me", methods=["GET"])
 def get_current_user():
     try:
@@ -17,14 +20,15 @@ def get_current_user():
         token = auth_header.split(" ")[1]
 
         try:
-            # 🔹 Decode JWT
-            decoded = jwt.decode(token, os.getenv("JWT_SECRET"), algorithms=["HS256"])
+            # 🔹 Decode JWT using JWT_SECRET variable
+            decoded = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
         except jwt.ExpiredSignatureError:
             return jsonify({"error": "Token has expired"}), 401
         except jwt.InvalidTokenError:
             return jsonify({"error": "Invalid token"}), 401
 
-        user_id = decoded.get("userId")
+        # 🔹 Check for both 'id' and 'userId' for compatibility
+        user_id = decoded.get("id") or decoded.get("userId")
         if not user_id:
             return jsonify({"error": "Invalid token payload"}), 401
 

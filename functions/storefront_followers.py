@@ -9,6 +9,9 @@ from functions.storefront_notifications import create_notification
 
 storefront_followers_bp = Blueprint("storefront_followers", __name__)
 
+# Add JWT_SECRET with fallback like in auth.py
+JWT_SECRET = os.getenv("JWT_SECRET", "supersecret")
+
 def verify_token():
     """Verify JWT token from request headers"""
     auth_header = request.headers.get("Authorization")
@@ -20,13 +23,16 @@ def verify_token():
     print(f"Token: {token}")
 
     try:
-        decoded = jwt.decode(token, os.getenv("JWT_SECRET"), algorithms=["HS256"])
+        # Use the JWT_SECRET variable instead of os.getenv directly
+        decoded = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        print(f"Decoded token: {decoded}")
     except jwt.ExpiredSignatureError:
         return jsonify({"error": "Token has expired"}), 401
     except jwt.InvalidTokenError:
         return jsonify({"error": "Invalid token"}), 401
 
-    user_id = decoded.get("userId")
+    # Try both 'id' and 'userId' for compatibility
+    user_id = decoded.get("id") or decoded.get("userId")
     print(f"Decoded: {decoded}")
     if not user_id:
         return jsonify({"error": "Invalid token payload"}), 401
