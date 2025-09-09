@@ -66,21 +66,20 @@ def send_email_notification(to_email, title, description, from_user_name=None):
         # Format timestamp
         timestamp = datetime.now().strftime("%B %d, %Y at %I:%M %p")
         
-        # Prepare context for template
-        context = {
-            'title': title,
-            'description': description,
-            'from_user_name': from_user_name,
-            'timestamp': timestamp
-        }
-        
-        print(f"🔍 [EMAIL DEBUG] Template context: {context}")
-        
-        # Use email_helper send_email function
+        # Use email_helper send_email function with **kwargs
         subject = f"🌊 RippleBids: {title}"
         print(f"🔍 [EMAIL DEBUG] Calling send_email with subject: {subject}")
         
-        send_email(to_email, subject, 'notification_email.html', context)
+        # Pass context as keyword arguments, not as a positional argument
+        send_email(
+            to_email, 
+            subject, 
+            'notification_email.html',
+            title=title,
+            description=description,
+            from_user_name=from_user_name,
+            timestamp=timestamp
+        )
         
         print(f"✅ Email sent successfully to {to_email}")
         return True

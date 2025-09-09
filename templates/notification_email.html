@@ -9,7 +9,7 @@
             margin: 0;
             padding: 0;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f4f4f4;
+            background-color: #1a1a1a;
             line-height: 1.6;
         }
         .email-container {
@@ -19,7 +19,7 @@
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
         .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
             color: white;
             padding: 30px 20px;
             text-align: center;
@@ -36,34 +36,36 @@
         }
         .content {
             padding: 40px 30px;
+            background-color: #ffffff;
         }
         .notification-card {
-            background-color: #f8f9fa;
-            border-left: 4px solid #667eea;
+            background-color: #111111;
+            border-left: 4px solid #22c55e;
             padding: 20px;
             margin: 20px 0;
             border-radius: 0 8px 8px 0;
+            color: white;
         }
         .notification-title {
             font-size: 20px;
             font-weight: 600;
-            color: #333;
+            color: #22c55e;
             margin-bottom: 10px;
         }
         .notification-message {
             font-size: 16px;
-            color: #555;
+            color: #ffffff;
             margin-bottom: 15px;
         }
         .notification-meta {
             font-size: 14px;
-            color: #888;
-            border-top: 1px solid #e9ecef;
+            color: #cccccc;
+            border-top: 1px solid #333333;
             padding-top: 15px;
         }
         .cta-button {
             display: inline-block;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
             color: white;
             padding: 12px 30px;
             text-decoration: none;
@@ -74,10 +76,11 @@
         }
         .cta-button:hover {
             transform: translateY(-2px);
+            background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
         }
         .footer {
-            background-color: #2c3e50;
-            color: #ecf0f1;
+            background-color: #111111;
+            color: #ffffff;
             padding: 30px 20px;
             text-align: center;
         }
@@ -89,10 +92,14 @@
             margin: 20px 0;
         }
         .social-links a {
-            color: #ecf0f1;
+            color: #22c55e;
             text-decoration: none;
             margin: 0 10px;
             font-size: 16px;
+            transition: color 0.2s ease;
+        }
+        .social-links a:hover {
+            color: #16a34a;
         }
         @media only screen and (max-width: 600px) {
             .email-container {
@@ -115,7 +122,7 @@
     <div class="email-container">
         <!-- Header -->
         <div class="header">
-            <div class="logo">🌊 RippleBids</div>
+            <div class="logo">RippleBids</div>
             <h1>New Notification</h1>
         </div>
 
