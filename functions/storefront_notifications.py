@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, render_template
+from flask import Blueprint, request, jsonify
 import pymysql
 import jwt
 import os
@@ -7,11 +7,11 @@ import uuid
 from uuid import uuid4
 import json
 from functools import wraps
-from extensions.extensions import get_db_connection, mail
-from flask_mail import Message
+from extensions.extensions import get_db_connection
+from functions.email_helper import send_email
 
-# Blueprint for storefront notifications
-storefront_notifications_bp = Blueprint('storefront_notifications', __name__)
+# Blueprint for storefront notifications - ADD template_folder parameter
+storefront_notifications_bp = Blueprint('storefront_notifications', __name__, template_folder='../templates')
 
 JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key")
 
@@ -54,52 +54,41 @@ def create_notifications_table():
 # Initialize table on import
 create_notifications_table()
 
-# Helper function to send email notifications with HTML template
+# Helper function to send email notifications using email_helper
 def send_email_notification(to_email, title, description, from_user_name=None):
     try:
+        print(f"🔍 [EMAIL DEBUG] Starting email send process...")
+        print(f"🔍 [EMAIL DEBUG] to_email: {to_email}")
+        print(f"🔍 [EMAIL DEBUG] title: {title}")
+        print(f"🔍 [EMAIL DEBUG] description: {description}")
+        print(f"🔍 [EMAIL DEBUG] from_user_name: {from_user_name}")
+        
         # Format timestamp
         timestamp = datetime.now().strftime("%B %d, %Y at %I:%M %p")
         
-        # Render HTML template
-        html_body = render_template(
-            'notification_email.html',
-            title=title,
-            description=description,
-            from_user_name=from_user_name,
-            timestamp=timestamp
-        )
+        # Prepare context for template
+        context = {
+            'title': title,
+            'description': description,
+            'from_user_name': from_user_name,
+            'timestamp': timestamp
+        }
         
-        # Create plain text fallback
-        text_body = f"""
-        Hello,
+        print(f"🔍 [EMAIL DEBUG] Template context: {context}")
         
-        You have received a new notification on RippleBids:
-        
-        Title: {title}
-        Message: {description}
-        {f'From: {from_user_name}' if from_user_name else ''}
-        Time: {timestamp}
-        
-        Visit our site: https://ripplebids.com
-        
-        Best regards,
-        RippleBids Team
-        """
-        
+        # Use email_helper send_email function
         subject = f"🌊 RippleBids: {title}"
+        print(f"🔍 [EMAIL DEBUG] Calling send_email with subject: {subject}")
         
-        msg = Message(
-            subject=subject,
-            recipients=[to_email],
-            body=text_body,
-            html=html_body
-        )
+        send_email(to_email, subject, 'notification_email.html', context)
         
-        mail.send(msg)
+        print(f"✅ Email sent successfully to {to_email}")
         return True
         
     except Exception as e:
         print(f"❌ Error sending email notification: {e}")
+        print(f"❌ [EMAIL DEBUG] Exception type: {type(e).__name__}")
+        print(f"❌ [EMAIL DEBUG] Exception args: {e.args}")
         return False
 
 @storefront_notifications_bp.route("/", methods=["POST"])
@@ -117,6 +106,7 @@ def create_notification():
     """
     try:
         data = request.get_json()
+        print(f"🔍 [NOTIFICATION DEBUG] Received data: {data}")
         
         # Validate required parameters
         required_fields = ['from_user_id', 'to_user_id', 'title', 'description']
@@ -129,6 +119,13 @@ def create_notification():
         email = data.get('email', False)
         title = data.get('title')
         description = data.get('description')
+        
+        print(f"🔍 [NOTIFICATION DEBUG] Parsed values:")
+        print(f"🔍 [NOTIFICATION DEBUG] from_user_id: {from_user_id}")
+        print(f"🔍 [NOTIFICATION DEBUG] to_user_id: {to_user_id}")
+        print(f"🔍 [NOTIFICATION DEBUG] email: {email}")
+        print(f"🔍 [NOTIFICATION DEBUG] title: {title}")
+        print(f"🔍 [NOTIFICATION DEBUG] description: {description}")
         
         # Validate email parameter
         if not isinstance(email, bool):
@@ -154,27 +151,52 @@ def create_notification():
         
         notification_id = cursor.lastrowid
         conn.commit()
+        print(f"✅ [NOTIFICATION DEBUG] Notification created with ID: {notification_id}")
         
         # Send email if requested
         if email:
-            # Get recipient email
-            user_query = "SELECT email, username FROM users WHERE id = %s"
-            cursor.execute(user_query, (to_user_id,))
-            user_data = cursor.fetchone()
-            
-            if user_data:
-                # Get sender name
-                sender_query = "SELECT username FROM users WHERE id = %s"
-                cursor.execute(sender_query, (from_user_id,))
-                sender_data = cursor.fetchone()
-                sender_name = sender_data[1] if sender_data else None
+            try:
+                print(f"🔍 [NOTIFICATION DEBUG] Email requested, looking up user: {to_user_id}")
                 
-                send_email_notification(
-                    user_data[0],  # email
-                    title, 
-                    description, 
-                    sender_name
-                )
+                # Get recipient email - using dictionary access
+                user_query = "SELECT email, username FROM users WHERE id = %s"
+                print(f"🔍 [NOTIFICATION DEBUG] Executing user query: {user_query} with param: {to_user_id}")
+                
+                cursor.execute(user_query, (to_user_id,))
+                user_data = cursor.fetchone()
+                print(f"🔍 [NOTIFICATION DEBUG] User query result: {user_data}")
+                print(f"🔍 [NOTIFICATION DEBUG] User data type: {type(user_data)}")
+                
+                if user_data:
+                    print(f"🔍 [NOTIFICATION DEBUG] User found, getting sender info: {from_user_id}")
+                    
+                    # Get sender name - using dictionary access
+                    sender_query = "SELECT username FROM users WHERE id = %s"
+                    print(f"🔍 [NOTIFICATION DEBUG] Executing sender query: {sender_query} with param: {from_user_id}")
+                    
+                    cursor.execute(sender_query, (from_user_id,))
+                    sender_data = cursor.fetchone()
+                    print(f"🔍 [NOTIFICATION DEBUG] Sender query result: {sender_data}")
+                    print(f"🔍 [NOTIFICATION DEBUG] Sender data type: {type(sender_data)}")
+                    
+                    sender_name = sender_data['username'] if sender_data else None
+                    print(f"🔍 [NOTIFICATION DEBUG] Extracted sender_name: {sender_name}")
+                    
+                    # Send email using email_helper
+                    print(f"🔍 [NOTIFICATION DEBUG] Calling send_email_notification...")
+                    send_email_notification(
+                        user_data['email'],  # dictionary access
+                        title, 
+                        description, 
+                        sender_name
+                    )
+                else:
+                    print(f"⚠️ [NOTIFICATION DEBUG] User {to_user_id} not found for email notification")
+            except Exception as email_error:
+                print(f"❌ [NOTIFICATION DEBUG] Email sending failed: {str(email_error)}")
+                print(f"❌ [NOTIFICATION DEBUG] Email error type: {type(email_error).__name__}")
+                print(f"❌ [NOTIFICATION DEBUG] Email error args: {email_error.args}")
+                # Don't fail the entire request if email fails
         
         cursor.close()
         conn.close()
@@ -192,7 +214,9 @@ def create_notification():
         }), 201
         
     except Exception as e:
-        print(f"❌ Error creating notification: {e}")
+        print(f"❌ [NOTIFICATION DEBUG] Error creating notification: {e}")
+        print(f"❌ [NOTIFICATION DEBUG] Exception type: {type(e).__name__}")
+        print(f"❌ [NOTIFICATION DEBUG] Exception args: {e.args}")
         return jsonify({"error": "Failed to create notification"}), 500
 
 @storefront_notifications_bp.route("/", methods=["GET"])
@@ -213,9 +237,12 @@ def get_notifications():
             return jsonify({"error": "user_id parameter is required"}), 400
         
         conn = get_db_connection()
+        if conn is None:
+            return jsonify({"error": "Database connection failed"}), 500
+            
         cursor = conn.cursor()
         
-        # Build query
+        # Build query with proper parameter handling
         base_query = """
         SELECT n.*, u.username as from_username
         FROM storefront_notifications n
@@ -229,7 +256,7 @@ def get_notifications():
             base_query += " AND n.read_status = FALSE"
         
         base_query += " ORDER BY n.created_at DESC LIMIT %s"
-        params.append(limit)
+        params.append(limit)  # Pass integer directly, not string
         
         cursor.execute(base_query, params)
         notifications = cursor.fetchall()
@@ -253,6 +280,9 @@ def mark_notification_as_read(notification_id):
     """
     try:
         conn = get_db_connection()
+        if conn is None:
+            return jsonify({"error": "Database connection failed"}), 500
+            
         cursor = conn.cursor()
         
         # Check if notification exists
@@ -261,6 +291,8 @@ def mark_notification_as_read(notification_id):
         notification = cursor.fetchone()
         
         if not notification:
+            cursor.close()
+            conn.close()
             return jsonify({"error": "Notification not found"}), 404
         
         # Update read status
@@ -287,6 +319,9 @@ def delete_notification(notification_id):
     """
     try:
         conn = get_db_connection()
+        if conn is None:
+            return jsonify({"error": "Database connection failed"}), 500
+            
         cursor = conn.cursor()
         
         # Check if notification exists
@@ -295,6 +330,8 @@ def delete_notification(notification_id):
         notification = cursor.fetchone()
         
         if not notification:
+            cursor.close()
+            conn.close()
             return jsonify({"error": "Notification not found"}), 404
         
         # Delete notification
@@ -336,17 +373,10 @@ def create_follow_notification():
         if not all([follower_id, store_owner_id, follower_name]):
             return jsonify({"error": "Missing required parameters"}), 400
         
-        # Create notification using the main create function
-        notification_data = {
-            'from_user_id': follower_id,
-            'to_user_id': store_owner_id,
-            'email': True,
-            'title': 'New Follower',
-            'description': f'{follower_name} started following your storefront'
-        }
-        
-        # Use the create_notification logic
         conn = get_db_connection()
+        if conn is None:
+            return jsonify({"error": "Database connection failed"}), 500
+            
         cursor = conn.cursor()
         
         insert_query = """
@@ -365,18 +395,21 @@ def create_follow_notification():
         notification_id = cursor.lastrowid
         conn.commit()
         
-        # Send email notification
-        user_query = "SELECT email FROM users WHERE id = %s"
-        cursor.execute(user_query, (store_owner_id,))
-        user_data = cursor.fetchone()
-        
-        if user_data:
-            send_email_notification(
-                user_data.get('email'),
-                'New Follower',
-                f'{follower_name} started following your storefront',
-                follower_name
-            )
+        # Send email notification using email_helper
+        try:
+            user_query = "SELECT email FROM users WHERE id = %s"
+            cursor.execute(user_query, (store_owner_id,))
+            user_data = cursor.fetchone()
+            
+            if user_data:
+                send_email_notification(
+                    user_data['email'],  # dictionary access
+                    'New Follower',
+                    f'{follower_name} started following your storefront',
+                    follower_name
+                )
+        except Exception as email_error:
+            print(f"❌ Email sending failed: {email_error}")
         
         cursor.close()
         conn.close()
@@ -412,6 +445,9 @@ def create_unfollow_notification():
             return jsonify({"error": "Missing required parameters"}), 400
         
         conn = get_db_connection()
+        if conn is None:
+            return jsonify({"error": "Database connection failed"}), 500
+            
         cursor = conn.cursor()
         
         insert_query = """
@@ -450,6 +486,9 @@ def get_notification_stats(user_id):
     """
     try:
         conn = get_db_connection()
+        if conn is None:
+            return jsonify({"error": "Database connection failed"}), 500
+            
         cursor = conn.cursor()
         
         # Get total and unread counts
@@ -467,9 +506,13 @@ def get_notification_stats(user_id):
         cursor.close()
         conn.close()
         
+        # Handle dictionary access properly
+        total_notifications = stats['total_notifications'] if stats else 0
+        unread_notifications = stats['unread_notifications'] if stats else 0
+        
         return jsonify({
-            "total_notifications": stats.get('total_notifications', 0),
-            "unread_notifications": stats.get('unread_notifications', 0)
+            "total_notifications": total_notifications,
+            "unread_notifications": unread_notifications
         }), 200
         
     except Exception as e:
