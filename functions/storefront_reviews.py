@@ -198,7 +198,7 @@ def get_storefront_reviews(storefront_id):
             SELECT id, customer_name, rating, title, comment, product_name, 
                    verified, helpful_count, created_at
             FROM storefront_reviews 
-            WHERE storefront_id = %s AND status = 'approved'
+            WHERE storefront_id = %s
             ORDER BY {order_by}
             LIMIT %s OFFSET %s
         """, (storefront_id, limit, offset))
