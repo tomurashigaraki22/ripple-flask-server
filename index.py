@@ -25,6 +25,7 @@ from functions.orders import orders_bp
 from functions.storefronts import storefronts_bp
 from functions.storefront_notifications import storefront_notifications_bp
 from functions.storefront_followers import storefront_followers_bp
+from functions.storefront_reviews import storefront_reviews_bp
 import pymysql
 from extensions.extensions import get_db_connection
 
@@ -244,6 +245,7 @@ app.register_blueprint(orders_bp, url_prefix="/orders")
 app.register_blueprint(storefronts_bp, url_prefix="/storefronts")
 app.register_blueprint(storefront_notifications_bp, url_prefix="/notifications")
 app.register_blueprint(storefront_followers_bp, url_prefix="/storefront/followers")
+app.register_blueprint(storefront_reviews_bp, url_prefix="/storefront/reviews")
 
 if __name__ == "__main__":
     # print(app.url_map)
