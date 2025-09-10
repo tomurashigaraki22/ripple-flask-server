@@ -188,7 +188,7 @@ def get_storefront_reviews(storefront_id):
         
         # Get total count
         cursor.execute(
-            "SELECT COUNT(*) as total FROM storefront_reviews WHERE storefront_id = %s AND status = 'approved'",
+            "SELECT COUNT(*) as total FROM storefront_reviews WHERE storefront_id = %s",
             (storefront_id,)
         )
         total_count = cursor.fetchone()['total']
@@ -216,7 +216,7 @@ def get_storefront_reviews(storefront_id):
                 SUM(CASE WHEN rating = 2 THEN 1 ELSE 0 END) as rating_2,
                 SUM(CASE WHEN rating = 1 THEN 1 ELSE 0 END) as rating_1
             FROM storefront_reviews 
-            WHERE storefront_id = %s AND status = 'approved'
+            WHERE storefront_id = %s
         """, (storefront_id,))
         
         stats = cursor.fetchone()
@@ -278,7 +278,7 @@ def mark_helpful(review_id):
         
         # Check if review exists
         cursor.execute(
-            "SELECT id, helpful_count FROM storefront_reviews WHERE id = %s AND status = 'approved'",
+            "SELECT id, helpful_count FROM storefront_reviews WHERE id = %s",
             (review_id,)
         )
         review = cursor.fetchone()
@@ -426,7 +426,7 @@ def get_review_stats(storefront_id):
                 SUM(CASE WHEN rating = 1 THEN 1 ELSE 0 END) as rating_1,
                 SUM(CASE WHEN verified = 1 THEN 1 ELSE 0 END) as verified_reviews
             FROM storefront_reviews 
-            WHERE storefront_id = %s AND status = 'approved'
+            WHERE storefront_id = %s
         """, (storefront_id,))
         
         stats = cursor.fetchone()
