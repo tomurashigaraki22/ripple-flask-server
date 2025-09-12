@@ -16,11 +16,26 @@ def create_profile():
         
         if not all(field in data for field in required_fields):
             return jsonify({"error": "Missing required fields"}), 400
-            
-        storefront_id = str(uuid4())  # Generate unique storefront ID
         
         conn = get_db_connection()
         cursor = conn.cursor()
+        
+        # Check if profile already exists for this owner
+        cursor.execute("""
+            SELECT storefront_id FROM user_profiles WHERE owner_id = %s
+        """, (data["owner_id"],))
+        
+        existing_profile = cursor.fetchone()
+        if existing_profile:
+            cursor.close()
+            conn.close()
+            return jsonify({
+                "message": "Profile already exists",
+                "storefront_id": existing_profile[0]
+            }), 200
+            
+        # Generate unique storefront ID or use provided one
+        storefront_id = data.get("storefront_id", str(uuid4()))
         
         cursor.execute("""
             INSERT INTO user_profiles 
@@ -59,6 +74,7 @@ def get_profile(storefront_id):
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        print(f"Profile id: {storefront_id}")
         
         # Fetch profile
         cursor.execute("""
@@ -121,20 +137,25 @@ def update_profile(storefront_id):
                 params.append(data[field])
         
         if not update_fields:
+            cursor.close()
+            conn.close()
             return jsonify({"error": "No fields to update"}), 400
             
         params.append(storefront_id)
         
+        # Fixed: Use storefront_id in WHERE clause instead of owner_id
         query = f"""
             UPDATE user_profiles 
-            SET {", ".join(update_fields)}
-            WHERE owner_id = %s
+            SET {", ".join(update_fields)}, updated_at = CURRENT_TIMESTAMP
+            WHERE storefront_id = %s
         """
         
         cursor.execute(query, params)
         conn.commit()
         
         if cursor.rowcount == 0:
+            cursor.close()
+            conn.close()
             return jsonify({"error": "Profile not found"}), 404
             
         cursor.close()
@@ -144,6 +165,30 @@ def update_profile(storefront_id):
         
     except Exception as e:
         print("Error updating profile:", e)
+        return jsonify({"error": "Internal server error"}), 500
+
+@storefronts_bp.route("/profile/exists/<storefront_id>", methods=["GET"])
+def check_storefront_exists(storefront_id):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT storefront_id FROM user_profiles WHERE storefront_id = %s
+        """, (storefront_id,))
+        
+        exists = cursor.fetchone() is not None
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            "exists": exists,
+            "storefront_id": storefront_id
+        }), 200
+        
+    except Exception as e:
+        print("Error checking storefront:", e)
         return jsonify({"error": "Internal server error"}), 500
 
 # Services Routes
