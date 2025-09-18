@@ -824,3 +824,65 @@ def reorder_skills():
     except Exception as e:
         print("Error reordering skills:", e)
         return jsonify({"error": "Internal server error"}), 500
+
+@storefronts_bp.route("/social-links", methods=["POST"])
+def create_social_link():
+    """Create a new social media link"""
+    try:
+        data = request.get_json()
+        required_fields = ["owner_id", "storefront_id", "platform", "url"]
+        
+        if not all(field in data for field in required_fields):
+            return jsonify({"error": "Missing required fields"}), 400
+            
+        # Validate URL format (basic validation)
+        url = data["url"].strip()
+        if not url.startswith(('http://', 'https://')):
+            return jsonify({"error": "URL must start with http:// or https://"}), 400
+            
+        # Validate platform (optional - you can add specific platform validation)
+        platform = data["platform"].strip()
+        if not platform:
+            return jsonify({"error": "Platform cannot be empty"}), 400
+            
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Check if this platform already exists for this storefront (optional uniqueness check)
+        cursor.execute("""
+            SELECT id FROM social_media_links 
+            WHERE storefront_id = %s AND platform = %s AND is_active = TRUE
+        """, (data["storefront_id"], platform))
+        
+        existing_link = cursor.fetchone()
+        if existing_link:
+            cursor.close()
+            conn.close()
+            return jsonify({"error": f"A {platform} link already exists for this storefront"}), 400
+        
+        cursor.execute("""
+            INSERT INTO social_media_links 
+            (owner_id, storefront_id, platform, url, is_active)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (
+            data["owner_id"],
+            data["storefront_id"],
+            platform,
+            url,
+            data.get("is_active", True)
+        ))
+        
+        conn.commit()
+        link_id = cursor.lastrowid
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            "message": "Social media link created successfully",
+            "link_id": link_id
+        }), 201
+        
+    except Exception as e:
+        print("Error creating social link:", e)
+        return jsonify({"error": "Internal server error"}), 500
