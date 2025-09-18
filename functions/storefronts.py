@@ -478,17 +478,26 @@ def delete_social_link(link_id):
 
 @storefronts_bp.route("/music-widgets/<storefront_id>", methods=["GET"])
 def get_music_widgets(storefront_id):
-    """Get all music widgets for a storefront"""
+    """Get the most recent active music widget for each platform (Spotify and SoundCloud)"""
     try:
         conn = get_db_connection()
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         
+        # Get the most recent active widget for each widget_type
         cursor.execute("""
-            SELECT id, widget_type, widget_url, is_active, created_at, updated_at
-            FROM music_widget_settings
-            WHERE storefront_id = %s AND is_active = TRUE
-            ORDER BY created_at DESC
-        """, (storefront_id,))
+            SELECT mws1.id, mws1.widget_type, mws1.widget_url, mws1.is_active, 
+                   mws1.created_at, mws1.updated_at
+            FROM music_widget_settings mws1
+            INNER JOIN (
+                SELECT widget_type, MAX(created_at) as max_created_at
+                FROM music_widget_settings
+                WHERE storefront_id = %s AND is_active = TRUE
+                GROUP BY widget_type
+            ) mws2 ON mws1.widget_type = mws2.widget_type 
+                   AND mws1.created_at = mws2.max_created_at
+            WHERE mws1.storefront_id = %s AND mws1.is_active = TRUE
+            ORDER BY mws1.widget_type, mws1.created_at DESC
+        """, (storefront_id, storefront_id))
         
         widgets = cursor.fetchall()
         cursor.close()
