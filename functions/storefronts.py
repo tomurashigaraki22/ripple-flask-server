@@ -31,7 +31,7 @@ def create_profile():
             conn.close()
             return jsonify({
                 "message": "Profile already exists",
-                "storefront_id": existing_profile[0]
+                "storefront_id": existing_profile['existing_profile']
             }), 200
             
         # Generate unique storefront ID or use provided one
@@ -639,7 +639,10 @@ def create_skill():
             FROM storefront_skills 
             WHERE storefront_id = %s
         """, (data["storefront_id"],))
-        max_order = cursor.fetchone()[0]
+        
+        result = cursor.fetchone()
+        print(f"Result: {result}")
+        max_order = result['max_order'] if result else 0
         
         cursor.execute("""
             INSERT INTO storefront_skills 
@@ -669,7 +672,7 @@ def create_skill():
         }), 201
         
     except Exception as e:
-        print("Error creating skill:", e)
+        print("Error creating skill:", str(e))
         return jsonify({"error": "Internal server error"}), 500
 
 @storefronts_bp.route("/skills/<storefront_id>", methods=["GET"])
@@ -780,7 +783,7 @@ def delete_skill(skill_id):
             SET display_order = display_order - 1
             WHERE storefront_id = %s 
             AND display_order > %s
-        """, (skill[0], skill[1]))
+        """, (skill['storefront_id'], skill['display_order']))
         
         conn.commit()
         cursor.close()
