@@ -84,7 +84,7 @@ def get_analytics():
                 COUNT(*) as orders
             FROM orders o
             JOIN listings l ON o.listing_id = l.id
-            WHERE l.user_id=%s AND o.status IN ('delivered','completed')
+            WHERE l.user_id=%s AND o.status IN ('delivered','completed', 'pending', 'escrow_funded')
             AND DATE(o.created_at) BETWEEN %s AND %s
             GROUP BY DATE_FORMAT(o.created_at, '%%Y-%%m')
             ORDER BY month ASC
@@ -105,7 +105,7 @@ def get_analytics():
                 COUNT(o.id) as orders
             FROM listings l
             LEFT JOIN orders o ON l.id=o.listing_id 
-                AND o.status IN ('delivered','completed')
+                AND o.status IN ('delivered','completed','pending','escrow_funded')
                 AND DATE(o.created_at) BETWEEN %s AND %s
             WHERE l.user_id=%s AND l.status='approved'
             GROUP BY l.id, l.title, l.views
@@ -126,7 +126,7 @@ def get_analytics():
                 COALESCE(SUM(o.amount),0) as earnings
             FROM listings l
             LEFT JOIN orders o ON l.id=o.listing_id 
-                AND o.status IN ('delivered','completed')
+                AND o.status IN ('delivered','completed','pending','escrow_funded')
                 AND DATE(o.created_at) BETWEEN %s AND %s
             WHERE l.user_id=%s AND l.status='approved'
             GROUP BY l.category
