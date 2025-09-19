@@ -56,7 +56,7 @@ def get_analytics():
             SELECT COALESCE(SUM(o.amount),0) as total
             FROM orders o
             JOIN listings l ON o.listing_id = l.id
-            WHERE l.user_id=%s AND o.status IN ('delivered','completed')
+            WHERE l.user_id=%s AND o.status IN ('delivered','completed','pending','escrow_funded')
             AND DATE(o.created_at) BETWEEN %s AND %s
         """, (user_id, start_date, end_date))
         total_earnings = float(cursor.fetchone()["total"] or 0)
