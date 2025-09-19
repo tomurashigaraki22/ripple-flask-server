@@ -46,37 +46,47 @@ def get_analytics():
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         cursor.execute("SET SESSION sql_mode=(SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY',''));")
 
+        # Helper to safely fetch a single numeric value
+        def safe_fetch(query, params):
+            cursor.execute(query, params)
+            result = cursor.fetchone()
+            # Return 0 if result is None or value is None
+            if result is None:
+                return 0
+            value = list(result.values())[0]
+            return value if value is not None else 0
+
+        # Helper to safely fetch multiple rows
+        def safe_fetch_all(query, params):
+            cursor.execute(query, params)
+            result = cursor.fetchall()
+            return result if result is not None else []
 
         # Total views
-        cursor.execute("SELECT COALESCE(SUM(views),0) as total FROM listings WHERE user_id=%s", (user_id,))
-        total_views = cursor.fetchone()["total"]
+        total_views = safe_fetch("SELECT COALESCE(SUM(views),0) as total FROM listings WHERE user_id=%s", (user_id,))
 
         # Total earnings
-        cursor.execute("""
+        total_earnings = float(safe_fetch("""
             SELECT COALESCE(SUM(o.amount),0) as total
             FROM orders o
             JOIN listings l ON o.listing_id = l.id
-            WHERE l.user_id=%s AND o.status IN ('delivered','completed','pending','escrow_funded')
-            AND DATE(o.created_at) BETWEEN %s AND %s
-        """, (user_id, start_date, end_date))
-        total_earnings = float(cursor.fetchone()["total"] or 0)
+            WHERE l.user_id=%s AND o.status IN ('delivered','completed','pending','escrow_funded','paid','shipped')
+        """, (user_id,)))
 
         # Active listings
-        cursor.execute("SELECT COUNT(*) as count FROM listings WHERE user_id=%s AND status='approved'", (user_id,))
-        total_listings = cursor.fetchone()["count"]
+        total_listings = safe_fetch("SELECT COUNT(*) as count FROM listings WHERE user_id=%s AND status='approved'", (user_id,))
 
         # Conversion rate
-        cursor.execute("""
+        orders_count = safe_fetch("""
             SELECT COUNT(*) as count
             FROM orders o
             JOIN listings l ON o.listing_id = l.id
             WHERE l.user_id=%s AND DATE(o.created_at) BETWEEN %s AND %s
         """, (user_id, start_date, end_date))
-        orders_count = cursor.fetchone()["count"]
         conversion_rate = (orders_count / total_views * 100) if total_views > 0 else 0
 
         # Monthly performance
-        cursor.execute("""
+        monthly_results = safe_fetch_all("""
             SELECT 
                 DATE_FORMAT(o.created_at, '%%Y-%%m') as month,
                 DATE_FORMAT(o.created_at, '%%b') as month_name,
@@ -90,13 +100,14 @@ def get_analytics():
             ORDER BY month ASC
             LIMIT 12
         """, (user_id, start_date, end_date))
+        
         monthly_data = [
             {"month": row["month_name"], "earnings": float(row["earnings"] or 0), "orders": row["orders"]}
-            for row in cursor.fetchall()
+            for row in monthly_results
         ]
 
         # Top listings
-        cursor.execute("""
+        top_results = safe_fetch_all("""
             SELECT 
                 l.id,
                 l.title,
@@ -105,20 +116,21 @@ def get_analytics():
                 COUNT(o.id) as orders
             FROM listings l
             LEFT JOIN orders o ON l.id=o.listing_id 
-                AND o.status IN ('delivered','completed','pending','escrow_funded')
+                AND o.status IN ('delivered','completed','pending','escrow_funded','paid','shipped')
                 AND DATE(o.created_at) BETWEEN %s AND %s
             WHERE l.user_id=%s AND l.status='approved'
             GROUP BY l.id, l.title, l.views
             ORDER BY earnings DESC, l.views DESC
             LIMIT 5
         """, (start_date, end_date, user_id))
+        
         top_listings = [
             {"id": row["id"], "title": row["title"], "views": row["views"], "earnings": float(row["earnings"] or 0), "orders": row["orders"]}
-            for row in cursor.fetchall()
+            for row in top_results
         ]
 
         # Category performance
-        cursor.execute("""
+        category_results = safe_fetch_all("""
             SELECT 
                 l.category,
                 COUNT(DISTINCT l.id) as listings,
@@ -126,15 +138,16 @@ def get_analytics():
                 COALESCE(SUM(o.amount),0) as earnings
             FROM listings l
             LEFT JOIN orders o ON l.id=o.listing_id 
-                AND o.status IN ('delivered','completed','pending','escrow_funded')
+                AND o.status IN ('delivered','completed','pending','escrow_funded','paid','shipped')
                 AND DATE(o.created_at) BETWEEN %s AND %s
             WHERE l.user_id=%s AND l.status='approved'
             GROUP BY l.category
             ORDER BY earnings DESC
         """, (start_date, end_date, user_id))
+        
         category_performance = [
             {"name": row["category"] or "uncategorized", "listings": row["listings"], "views": row["views"], "earnings": float(row["earnings"] or 0)}
-            for row in cursor.fetchall()
+            for row in category_results
         ]
 
         cursor.close()
