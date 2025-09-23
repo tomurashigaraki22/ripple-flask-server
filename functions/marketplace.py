@@ -24,7 +24,7 @@ def get_marketplace_listings():
 
         # Handle category and subcategory filtering
         if category and category != "all": 
-            where_clause += " AND l.category = %s" 
+            where_clause += " OR l.category = %s" 
             query_params.append(category)
             
             # Add subcategory filtering if provided
@@ -37,8 +37,30 @@ def get_marketplace_listings():
             query_params.append(chain) 
 
         if is_physical and is_physical.lower() != "all": 
-            where_clause += " AND LOWER(l.category) = 'physical' OR l.is_physical = %s" 
-            query_params.append(1 if is_physical.lower() == "physical" else 0) 
+            print(f"Yes: {is_physical}")
+            is_physical_value = 1 if is_physical.lower() == "physical" else 0
+            where_clause += f" AND l.is_physical = {is_physical_value}" 
+            
+            # Check for specific categories and normalize them
+            categories = ["Electronics", "Fashion", "Jewelry", "Collectibles", "Art", "Beauty", 
+                         "Food & Drink", "Accessories", "Toys", "Furniture", "Books", 
+                         "Home & Garden", "Health And Beauty"]
+            
+            category_conditions = []
+            for cat in categories:
+                normalized_cat = cat.lower()
+                if " & " in normalized_cat:
+                    normalized_cat = normalized_cat.replace(" & ", "-")
+                if " and " in normalized_cat:
+                    normalized_cat = normalized_cat.replace(" and ", "-")
+                if " " in normalized_cat:
+                    normalized_cat = normalized_cat.replace(" ", "-")
+                
+                category_conditions.append(f"l.category = '{normalized_cat}'")
+            
+            if category_conditions:
+                where_clause += f" AND ({' OR '.join(category_conditions)})"
+                print(f"Where Calu: {where_clause}") 
 
         # Add price range filtering 
         if price_range and price_range != "all": 
