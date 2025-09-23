@@ -37,7 +37,7 @@ def get_marketplace_listings():
             query_params.append(chain) 
 
         if is_physical and is_physical.lower() != "all": 
-            where_clause += " AND LOWER(l.category) = 'physical' AND l.is_physical = %s" 
+            where_clause += " AND LOWER(l.category) = 'physical' OR l.is_physical = %s" 
             query_params.append(1 if is_physical.lower() == "physical" else 0) 
 
         # Add price range filtering 
