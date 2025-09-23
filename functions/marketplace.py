@@ -3,138 +3,146 @@ from extensions.extensions import get_db_connection  # your helper for DB connec
 
 marketplace_bp = Blueprint("marketplace", __name__)
 
-@marketplace_bp.route("/listings", methods=["GET"])
-def get_marketplace_listings():
-    try:
-        # Query params
-        limit = int(request.args.get("limit", 8))
-        page = int(request.args.get("page", 1))
-        offset = (page - 1) * limit
-        category = request.args.get("category")
-        chain = request.args.get("chain")
-        is_physical = request.args.get("isPhysical")
-        search = request.args.get("search")
-        sort_by = request.args.get("sortBy", "recent")
-        price_range = request.args.get("priceRange")  # Add price range parameter
+@marketplace_bp.route("/listings", methods=["GET"]) 
+def get_marketplace_listings(): 
+    try: 
+        # Query params 
+        limit = int(request.args.get("limit", 8)) 
+        page = int(request.args.get("page", 1)) 
+        offset = (page - 1) * limit 
+        category = request.args.get("category") 
+        subcategory = request.args.get("subcategory")  # Add subcategory parameter
+        chain = request.args.get("chain") 
+        is_physical = request.args.get("isPhysical") 
+        search = request.args.get("search") 
+        sort_by = request.args.get("sortBy", "recent") 
+        price_range = request.args.get("priceRange")
 
-        # Base query
-        where_clause = 'WHERE l.status = "approved" AND l.status != "sold"'
-        query_params = []
+        # Base query 
+        where_clause = 'WHERE l.status = "approved" AND l.status != "sold"' 
+        query_params = [] 
 
-        if category and category != "all":
-            where_clause += " AND l.category = %s"
+        # Handle category and subcategory filtering
+        if category and category != "all": 
+            where_clause += " AND l.category = %s" 
             query_params.append(category)
+            
+            # Add subcategory filtering if provided
+            if subcategory and subcategory != "all":
+                where_clause += " AND l.subcategory = %s"
+                query_params.append(subcategory)
 
-        if chain and chain != "all":
-            where_clause += " AND l.chain = %s"
-            query_params.append(chain)
+        if chain and chain != "all": 
+            where_clause += " AND l.chain = %s" 
+            query_params.append(chain) 
 
-        if is_physical and is_physical.lower() != "all":
-            where_clause += " AND LOWER(l.category) = 'physical' AND l.is_physical = %s"
-            query_params.append(1 if is_physical.lower() == "physical" else 0)
+        if is_physical and is_physical.lower() != "all": 
+            where_clause += " AND LOWER(l.category) = 'physical' AND l.is_physical = %s" 
+            query_params.append(1 if is_physical.lower() == "physical" else 0) 
 
-        # Add price range filtering
-        if price_range and price_range != "all":
-            if price_range == "1000+":
-                where_clause += " AND l.price >= %s"
-                query_params.append(1000)
-            else:
-                # Handle ranges like "0-50", "50-200", etc.
-                price_min, price_max = map(float, price_range.split("-"))
-                where_clause += " AND l.price >= %s AND l.price <= %s"
-                query_params.extend([price_min, price_max])
+        # Add price range filtering 
+        if price_range and price_range != "all": 
+            if price_range == "1000+": 
+                where_clause += " AND l.price >= %s" 
+                query_params.append(1000) 
+            else: 
+                # Handle ranges like "0-50", "50-200", etc. 
+                price_min, price_max = map(float, price_range.split("-")) 
+                where_clause += " AND l.price >= %s AND l.price <= %s" 
+                query_params.extend([price_min, price_max]) 
 
-        if search:
-            where_clause += " AND (l.title LIKE %s OR l.description LIKE %s)"
-            query_params.extend([f"%{search}%", f"%{search}%"])
+        if search: 
+            where_clause += " AND (l.title LIKE %s OR l.description LIKE %s)" 
+            query_params.extend([f"%{search}%", f"%{search}%"]) 
 
-        # Sorting
-        order_clause = "ORDER BY l.created_at DESC"
-        if sort_by == "price_low":
-            order_clause = "ORDER BY l.price ASC"
-        elif sort_by == "price_high":
-            order_clause = "ORDER BY l.price DESC"
-        elif sort_by == "popular":
-            order_clause = "ORDER BY l.views DESC"
+        # Sorting 
+        order_clause = "ORDER BY l.created_at DESC" 
+        if sort_by == "price_low": 
+            order_clause = "ORDER BY l.price ASC" 
+        elif sort_by == "price_high": 
+            order_clause = "ORDER BY l.price DESC" 
+        elif sort_by == "popular": 
+            order_clause = "ORDER BY l.views DESC" 
 
-        conn = get_db_connection()
-        cursor = conn.cursor()
+        conn = get_db_connection() 
+        cursor = conn.cursor() 
 
-        # Main query
-        cursor.execute(f"""
+        # Main query 
+        cursor.execute(f""" 
             SELECT 
-                l.id,
-                l.title,
-                l.description,
-                l.price,
-                l.category,
-                l.chain,
-                l.is_physical,
-                l.images,
-                l.tags,
-                l.views,
-                l.created_at,
-                l.shipping_from,
-                l.updated_at,
-                u.username as seller_username,
-                u.id as seller_id
-            FROM listings l
-            JOIN users u ON l.user_id = u.id
-            {where_clause}
-            {order_clause}
-            LIMIT %s OFFSET %s
-        """, (*query_params, limit, offset))
-        listings = cursor.fetchall()
+                l.id, 
+                l.title, 
+                l.description, 
+                l.price, 
+                l.category, 
+                l.subcategory,  # Add subcategory to the SELECT statement
+                l.chain, 
+                l.is_physical, 
+                l.images, 
+                l.tags, 
+                l.views, 
+                l.created_at, 
+                l.shipping_from, 
+                l.updated_at, 
+                u.username as seller_username, 
+                u.id as seller_id 
+            FROM listings l 
+            JOIN users u ON l.user_id = u.id 
+            {where_clause} 
+            {order_clause} 
+            LIMIT %s OFFSET %s 
+        """, (*query_params, limit, offset)) 
+        listings = cursor.fetchall() 
 
-        # Count query
-        cursor.execute(f"""
-            SELECT COUNT(*) as total
-            FROM listings l
-            JOIN users u ON l.user_id = u.id
-            {where_clause}
-        """, tuple(query_params))
-        total = cursor.fetchone()["total"]
+        # Count query 
+        cursor.execute(f""" 
+            SELECT COUNT(*) as total 
+            FROM listings l 
+            JOIN users u ON l.user_id = u.id 
+            {where_clause} 
+        """, tuple(query_params)) 
+        total = cursor.fetchone()["total"] 
 
-        cursor.close()
-        conn.close()
+        cursor.close() 
+        conn.close() 
 
-        total_pages = (total + limit - 1) // limit  # ceiling division
+        total_pages = (total + limit - 1) // limit  # ceiling division 
 
-        # Parse JSON fields
-        for listing in listings:
-            if isinstance(listing.get("images"), str):
-                try:
-                    import json
-                    listing["images"] = json.loads(listing["images"])
-                except:
-                    listing["images"] = []
-            if isinstance(listing.get("tags"), str):
-                try:
-                    import json
-                    listing["tags"] = json.loads(listing["tags"])
-                except:
-                    listing["tags"] = []
-            if isinstance(listing.get("shipping_from"), str):
-                try:
-                    import json
-                    listing["shipping_from"] = json.loads(listing["shipping_from"])
-                except:
-                    listing["shipping_from"] = {}
+        # Parse JSON fields 
+        for listing in listings: 
+            if isinstance(listing.get("images"), str): 
+                try: 
+                    import json 
+                    listing["images"] = json.loads(listing["images"]) 
+                except: 
+                    listing["images"] = [] 
+            if isinstance(listing.get("tags"), str): 
+                try: 
+                    import json 
+                    listing["tags"] = json.loads(listing["tags"]) 
+                except: 
+                    listing["tags"] = [] 
+            if isinstance(listing.get("shipping_from"), str): 
+                try: 
+                    import json 
+                    listing["shipping_from"] = json.loads(listing["shipping_from"]) 
+                except: 
+                    listing["shipping_from"] = {} 
 
-        return jsonify({
-            "listings": listings,
-            "pagination": {
-                "total": total,
-                "totalPages": total_pages,
-                "currentPage": page,
-                "limit": limit,
-                "hasMore": page < total_pages,
-                "hasPrevious": page > 1
-            }
-        })
+        return jsonify({ 
+            "listings": listings, 
+            "pagination": { 
+                "total": total, 
+                "totalPages": total_pages, 
+                "currentPage": page, 
+                "limit": limit, 
+                "hasMore": page < total_pages, 
+                "hasPrevious": page > 1 
+            } 
+        }) 
 
-    except Exception as e:
-        print("Error fetching marketplace listings:", e)
+    except Exception as e: 
+        print("Error fetching marketplace listings:", e) 
         return jsonify({"error": "Internal server error"}), 500
 
 @marketplace_bp.route("/listings/<string:id>", methods=["GET"])
