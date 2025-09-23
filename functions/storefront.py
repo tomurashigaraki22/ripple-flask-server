@@ -453,6 +453,231 @@ def get_storefront_listings():
         print("Error fetching listings:", e)
         return jsonify({"error": "Internal server error"}), 500
 
+
+
+@storefront_bp.route("/listings/<listing_id>", methods=["DELETE"])
+def delete_storefront_listing(listing_id):
+    """
+    DELETE - Delete a listing by ID
+    URL params: listing_id - The ID of the listing to delete
+    """
+    try:
+        user_or_error = verify_storefront_access_func()
+    
+        # Check if it returned an error
+        if isinstance(user_or_error, tuple):
+            return user_or_error
+
+        user = user_or_error
+        user_id = user["id"]
+
+        # Validate listing_id
+        if not listing_id:
+            return jsonify({"error": "Listing ID is required"}), 400
+
+        conn = get_db_connection()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+        # Check if listing exists and belongs to the user
+        cursor.execute("""
+            SELECT id, status FROM listings 
+            WHERE id = %s AND user_id = %s
+        """, (listing_id, user_id))
+        listing = cursor.fetchone()
+
+        if not listing:
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "Listing not found or you don't have permission to delete it"}), 404
+
+        # Check if listing has associated orders
+        cursor.execute("""
+            SELECT COUNT(*) as count FROM orders 
+            WHERE listing_id = %s AND status NOT IN ('cancelled', 'refunded')
+        """, (listing_id,))
+        result = cursor.fetchone()
+        order_count = result["count"] if result else 0
+
+        if order_count > 0:
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "Cannot delete listing with active orders"}), 400
+
+        # Delete the listing
+        cursor.execute("DELETE FROM listings WHERE id = %s", (listing_id,))
+        conn.commit()
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({"success": True, "message": "Listing deleted successfully"}), 200
+
+    except Exception as e:
+        print(f"Error deleting listing: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+@storefront_bp.route("/listings/<listing_id>", methods=["PUT"])
+def update_storefront_listing(listing_id):
+    """
+    PUT - Update listing information
+    URL params: listing_id - The ID of the listing to update
+    Body: title, description, price, category, chain, isPhysical, images, tags,
+          stock_quantity, low_stock_threshold, shipping_from
+    """
+    try:
+        user_or_error = verify_storefront_access_func()
+    
+        # Check if it returned an error
+        if isinstance(user_or_error, tuple):
+            return user_or_error
+
+        user = user_or_error
+        user_id = user["id"]
+        data = request.get_json(force=True) or {}
+
+        # Validate listing_id
+        if not listing_id:
+            return jsonify({"error": "Listing ID is required"}), 400
+
+        conn = get_db_connection()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+        # Check if listing exists and belongs to the user
+        cursor.execute("""
+            SELECT * FROM listings 
+            WHERE id = %s AND user_id = %s
+        """, (listing_id, user_id))
+        listing = cursor.fetchone()
+
+        if not listing:
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "Listing not found or you don't have permission to update it"}), 404
+
+        # Check if listing has active orders and is being modified significantly
+        cursor.execute("""
+            SELECT COUNT(*) as count FROM orders 
+            WHERE listing_id = %s AND status IN ('pending', 'paid', 'shipped')
+        """, (listing_id,))
+        result = cursor.fetchone()
+        active_order_count = result["count"] if result else 0
+
+        # Extract and validate fields
+        title = data.get("title", listing.get("title", ""))
+        description = data.get("description", listing.get("description", ""))
+        price = data.get("price", listing.get("price", 0))
+        category = data.get("category", listing.get("category", ""))
+        chain = data.get("chain", listing.get("chain", ""))
+        is_physical = bool(data.get("isPhysical", listing.get("is_physical", False)))
+        
+        # Safely parse JSON fields
+        images_data = listing.get("images")
+        if isinstance(images_data, str):
+            try:
+                images_data = json.loads(images_data)
+            except Exception:
+                images_data = []
+        images = data.get("images", images_data or [])
+        
+        tags_data = listing.get("tags")
+        if isinstance(tags_data, str):
+            try:
+                tags_data = json.loads(tags_data)
+            except Exception:
+                tags_data = []
+        tags = data.get("tags", tags_data or [])
+        
+        stock_quantity = data.get("stock_quantity", listing.get("stock_quantity", 1))
+        low_stock_threshold = data.get("low_stock_threshold", listing.get("low_stock_threshold", 5))
+        shipping_from = data.get("address")
+
+        # Basic validation
+        if not all([title, description, price, category, chain]):
+            return jsonify({"error": "Title, description, price, category, and chain are required"}), 400
+
+        try:
+            price_val = float(price)
+        except Exception:
+            return jsonify({"error": "Price must be a number"}), 400
+        if price_val <= 0:
+            return jsonify({"error": "Price must be greater than 0"}), 400
+
+        # Stock & images validation
+        stock_qty = int(stock_quantity or 1)
+        if stock_qty < 1:
+            return jsonify({"error": "Stock quantity must be at least 1"}), 400
+        if not images or not isinstance(images, list) or len(images) == 0:
+            return jsonify({"error": "At least one image is required"}), 400
+
+        # Validate shipping_from if provided
+        shipping_from_json = None
+        if shipping_from is not None:
+            if not isinstance(shipping_from, dict):
+                return jsonify({"error": "shipping_from must be an object"}), 400
+            
+            # Required fields
+            required_fields = ["street", "city", "state", "country", "zipCode", "phone"]
+            missing_fields = [field for field in required_fields if field not in shipping_from]
+            
+            if missing_fields:
+                return jsonify({
+                    "error": f"Missing required shipping fields: {', '.join(missing_fields)}"
+                }), 400
+            
+            # Validate data types
+            if not all(isinstance(shipping_from.get(field), str) for field in required_fields):
+                return jsonify({
+                    "error": "All shipping fields must be strings"
+                }), 400
+                
+            shipping_from_json = json.dumps(shipping_from)
+        elif listing.get("shipping_from") is not None:
+            shipping_from_json = listing.get("shipping_from")
+
+        # Prepare update query
+        update_fields = [
+            "title = %s",
+            "description = %s",
+            "price = %s",
+            "category = %s",
+            "chain = %s",
+            "is_physical = %s",
+            "images = %s",
+            "tags = %s",
+            "stock_quantity = %s",
+            "low_stock_threshold = %s",
+            "shipping_from = %s",
+            "updated_at = NOW()"
+        ]
+
+        # Convert images and tags to JSON strings
+        images_json = json.dumps(images)
+        tags_json = json.dumps(tags)
+
+        # Execute update
+        cursor.execute(f"""
+            UPDATE listings SET {', '.join(update_fields)}
+            WHERE id = %s AND user_id = %s
+        """, (
+            title, description, price, category, chain, is_physical,
+            images_json, tags_json, stock_qty, low_stock_threshold,
+            shipping_from_json, listing_id, user_id
+        ))
+        conn.commit()
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            "success": True, 
+            "message": "Listing updated successfully",
+            "listing_id": listing_id
+        }), 200
+
+    except Exception as e:
+        print(f"Error updating listing: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
 @storefront_bp.route("/listings", methods=["POST"])
 def create_storefront_listing():
     """
