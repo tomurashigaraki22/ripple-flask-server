@@ -1124,6 +1124,81 @@ def save_profile():
     finally:
         conn.close()
 
+@storefront_bp.route("/listings/<listing_id>", methods=["GET"])
+def get_storefront_listing_by_id(listing_id):
+    """
+    GET - Fetch a single listing by ID
+    URL params: listing_id - The ID of the listing to fetch
+    """
+    try:
+        # Validate listing_id
+        if not listing_id:
+            return jsonify({"error": "Listing ID is required"}), 400
+
+        conn = get_db_connection()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+        # Fetch listing details
+        cursor.execute("""
+            SELECT id, user_id, title, description, price, category, chain, is_physical,
+                   images, tags, status, views, created_at, updated_at, shipping_from,
+                   stock_quantity, original_stock, low_stock_threshold,
+                   is_auction, starting_bid, current_bid, bid_increment, auction_end_date, buy_now_price
+            FROM listings
+            WHERE id = %s
+        """, (listing_id,))
+        listing = cursor.fetchone()
+
+        if not listing:
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "Listing not found"}), 404
+
+        # Increment views
+        cursor.execute("UPDATE listings SET views = views + 1 WHERE id = %s", (listing_id,))
+        conn.commit()
+
+        # Parse JSON fields
+        # Parse images
+        if isinstance(listing.get("images"), str):
+            try:
+                listing["images"] = json.loads(listing["images"])
+            except Exception:
+                listing["images"] = []
+        
+        # Parse tags
+        if isinstance(listing.get("tags"), str):
+            try:
+                listing["tags"] = json.loads(listing["tags"])
+            except Exception:
+                listing["tags"] = []
+
+        # Parse shipping_from
+        if isinstance(listing.get("shipping_from"), str):
+            try:
+                listing["shipping_from"] = json.loads(listing["shipping_from"])
+            except Exception:
+                listing["shipping_from"] = None
+
+        # Convert price to float
+        if "price" in listing:
+            listing["price"] = float(listing["price"])
+
+        # Convert numeric fields
+        numeric_fields = ["starting_bid", "current_bid", "bid_increment", "buy_now_price"]
+        for field in numeric_fields:
+            if field in listing and listing[field] is not None:
+                listing[field] = float(listing[field])
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({"listing": listing}), 200
+
+    except Exception as e:
+        print(f"Error fetching listing: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
 # Cloudinary signature endpoint
 @storefront_bp.route("/cloudinary/signature", methods=["POST"])
 def generate_signature():
