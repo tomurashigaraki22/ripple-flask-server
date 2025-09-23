@@ -106,6 +106,8 @@ def get_marketplace_listings():
                 l.created_at, 
                 l.shipping_from, 
                 l.updated_at, 
+                l.is_auction,
+                l.auction_end_date,
                 u.username as seller_username, 
                 u.id as seller_id 
             FROM listings l 
