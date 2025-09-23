@@ -15,6 +15,7 @@ def get_marketplace_listings():
         is_physical = request.args.get("isPhysical")
         search = request.args.get("search")
         sort_by = request.args.get("sortBy", "recent")
+        price_range = request.args.get("priceRange")  # Add price range parameter
 
         # Base query
         where_clause = 'WHERE l.status = "approved" AND l.status != "sold"'
@@ -31,6 +32,17 @@ def get_marketplace_listings():
         if is_physical and is_physical != "all":
             where_clause += " AND l.is_physical = %s"
             query_params.append(1 if is_physical == "physical" else 0)
+
+        # Add price range filtering
+        if price_range and price_range != "all":
+            if price_range == "1000+":
+                where_clause += " AND l.price >= %s"
+                query_params.append(1000)
+            else:
+                # Handle ranges like "0-50", "50-200", etc.
+                price_min, price_max = map(float, price_range.split("-"))
+                where_clause += " AND l.price >= %s AND l.price <= %s"
+                query_params.extend([price_min, price_max])
 
         if search:
             where_clause += " AND (l.title LIKE %s OR l.description LIKE %s)"
