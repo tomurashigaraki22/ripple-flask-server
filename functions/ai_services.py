@@ -7,13 +7,13 @@ from io import BytesIO
 from PIL import Image
 import numpy as np
 from extensions.extensions import get_db_connection
-import openai
+import google.generativeai as genai
 
 ai_services_bp = Blueprint("ai_services", __name__)
 
-# Configure OpenAI API key from environment variable
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
-openai.api_key = OPENAI_API_KEY
+# Configure Gemini API key (hardcoded as requested)
+GEMINI_API_KEY = "AIzaSyBrEffEkJw_KFY2XDHWRt0B3jmobfLmAQE"
+genai.configure(api_key=GEMINI_API_KEY)
 
 @ai_services_bp.route("/estimate-dimensions", methods=["POST"])
 def estimate_dimensions():
@@ -41,7 +41,10 @@ def estimate_dimensions():
         dimensions, weight = estimate_from_image_ai(image_data, title, description)
         
         # Log the estimation in database
-        log_ai_estimation(image_url, title, description, dimensions, weight)
+        try:
+            log_ai_estimation(image_url, title, description, dimensions, weight)
+        except Exception as e:
+            print(f"Warning: Could not log estimation: {str(e)}")
         
         return jsonify({
             "dimensions": dimensions,
@@ -54,14 +57,16 @@ def estimate_dimensions():
 
 def estimate_from_image_ai(image_data, title="", description=""):
     """
-    Estimate dimensions and weight from image data using OpenAI's Vision API
+    Estimate dimensions and weight from image data using Google's Gemini API
     """
     try:
-        # Convert image to base64 for OpenAI API
+        # Convert image to bytes for Gemini API
         img = Image.open(BytesIO(image_data))
+        
+        # Create a new BytesIO object for the image
         buffered = BytesIO()
         img.save(buffered, format="JPEG")
-        img_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
+        img_bytes = buffered.getvalue()
         
         # Create prompt with context
         prompt = f"""
@@ -83,28 +88,17 @@ def estimate_from_image_ai(image_data, title="", description=""):
         }}
         """
         
-        # Call OpenAI API with image
-        response = openai.chat.completions.create(
-            model="gpt-4-vision-preview",
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{img_str}"
-                            }
-                        }
-                    ]
-                }
-            ],
-            max_tokens=300
-        )
+        # Set up the Gemini model - Updated to use current model name
+        model = genai.GenerativeModel('gemini-2.5-flash')
+        
+        # Call Gemini API with image
+        response = model.generate_content([
+            prompt,
+            {"mime_type": "image/jpeg", "data": img_bytes}
+        ])
         
         # Extract the response text
-        result_text = response.choices[0].message.content
+        result_text = response.text
         
         # Parse the JSON from the response
         # Find JSON object in the response text
@@ -118,7 +112,7 @@ def estimate_from_image_ai(image_data, title="", description=""):
                 weight = result.get("weight", 2.0)
                 return dimensions, weight
             except json.JSONDecodeError:
-                print("Failed to parse JSON from OpenAI response")
+                print("Failed to parse JSON from Gemini response")
         
         # Fallback to default values if parsing fails
         return {"length": 10, "width": 8, "height": 4}, 2.0
@@ -207,6 +201,21 @@ def log_ai_estimation(image_url, title, description, dimensions, weight):
         conn = get_db_connection()
         cursor = conn.cursor()
         
+        # First check if the table exists, create it if it doesn't
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS ai_estimations (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                image_url TEXT,
+                title VARCHAR(255),
+                description TEXT,
+                dimensions JSON,
+                weight FLOAT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+        
+        # Now insert the data
         cursor.execute("""
             INSERT INTO ai_estimations (image_url, title, description, dimensions, weight, created_at)
             VALUES (%s, %s, %s, %s, %s, NOW())
@@ -223,10 +232,11 @@ def log_ai_estimation(image_url, title, description, dimensions, weight):
         conn.close()
     except Exception as e:
         print(f"Error logging AI estimation: {str(e)}")
+        raise
 
 @ai_services_bp.route("/generate-description", methods=["POST"])
 def generate_description():
-    """Generate product description based on image and basic info using OpenAI"""
+    """Generate product description based on image and basic info using Gemini"""
     try:
         data = request.get_json()
         if not data:
@@ -236,51 +246,35 @@ def generate_description():
         title = data.get('title', '')
         category = data.get('category', '')
         
-        # If OpenAI API key is available, use it to generate description
-        if OPENAI_API_KEY:
-            try:
-                # Download the image if URL is provided
-                img_str = None
-                if image_url:
-                    response = requests.get(image_url)
-                    if response.status_code == 200:
-                        img = Image.open(BytesIO(response.content))
-                        buffered = BytesIO()
-                        img.save(buffered, format="JPEG")
-                        img_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
+        try:
+            # Download the image if URL is provided
+            img_bytes = None
+            if image_url:
+                response = requests.get(image_url)
+                if response.status_code == 200:
+                    img_bytes = response.content
+            
+            # Set up the Gemini model - Updated to use current model name
+            model = genai.GenerativeModel('gemini-2.5-flash' if img_bytes else 'gemini-2.5-flash')
+            
+            # Create prompt
+            prompt = f"Write a compelling product description for this {category} product titled '{title}'. Keep it under 100 words, highlight key features, and make it engaging for potential buyers."
+            
+            # Call Gemini API
+            if img_bytes:
+                response = model.generate_content([
+                    prompt,
+                    {"mime_type": "image/jpeg", "data": img_bytes}
+                ])
+            else:
+                response = model.generate_content(prompt)
+            
+            description = response.text
+            return jsonify({"description": description})
                 
-                # Create messages for OpenAI API
-                messages = [
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": f"Write a compelling product description for this {category} product titled '{title}'. Keep it under 100 words, highlight key features, and make it engaging for potential buyers."}
-                        ]
-                    }
-                ]
-                
-                # Add image if available
-                if img_str:
-                    messages[0]["content"].append({
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/jpeg;base64,{img_str}"
-                        }
-                    })
-                
-                # Call OpenAI API
-                response = openai.chat.completions.create(
-                    model="gpt-4-vision-preview" if img_str else "gpt-4",
-                    messages=messages,
-                    max_tokens=200
-                )
-                
-                description = response.choices[0].message.content
-                return jsonify({"description": description})
-                
-            except Exception as e:
-                print(f"Error using OpenAI for description: {str(e)}")
-                # Fall back to template-based description
+        except Exception as e:
+            print(f"Error using Gemini for description: {str(e)}")
+            # Fall back to template-based description
         
         # Fallback: Template-based description generation
         descriptions = [
@@ -302,7 +296,7 @@ def generate_description():
 
 @ai_services_bp.route("/analyze-text", methods=["POST"])
 def analyze_text():
-    """Analyze product text to suggest improvements"""
+    """Analyze product text to suggest improvements using OpenAI"""
     try:
         data = request.get_json()
         if not data or 'text' not in data:
@@ -310,40 +304,44 @@ def analyze_text():
         
         text = data['text']
         
-        # If OpenAI API key is available, use it for text analysis
-        if OPENAI_API_KEY:
-            try:
-                response = openai.chat.completions.create(
-                    model="gpt-4",
-                    messages=[
-                        {
-                            "role": "system", 
-                            "content": "You are a product listing expert. Analyze the provided product description and provide feedback."
-                        },
-                        {
-                            "role": "user", 
-                            "content": f"Analyze this product description and provide word count, sentiment analysis (positive, neutral, negative), and 2-3 specific suggestions for improvement. Return ONLY a JSON object with format: {{\"wordCount\": int, \"sentiment\": string, \"suggestions\": [string]}}\n\nText to analyze: {text}"
-                        }
-                    ],
-                    max_tokens=300
-                )
-                
-                result_text = response.choices[0].message.content
-                
-                # Parse JSON from response
-                import re
-                json_match = re.search(r'({[\s\S]*})', result_text)
-                if json_match:
-                    json_str = json_match.group(1)
-                    try:
-                        result = json.loads(json_str)
-                        return jsonify({"analysis": result})
-                    except json.JSONDecodeError:
-                        print("Failed to parse JSON from OpenAI response")
+        try:
+            # Use OpenAI for text analysis
+            prompt = f"""Analyze this product description and provide:
+            1. Word count
+            2. Sentiment analysis (positive, neutral, negative)
+            3. 2-3 specific suggestions for improvement
             
-            except Exception as e:
-                print(f"Error using OpenAI for text analysis: {str(e)}")
-                # Fall back to simple analysis
+            Return ONLY a JSON object with format: 
+            {{"wordCount": int, "sentiment": string, "suggestions": [string]}}
+            
+            Text to analyze: {text}"""
+            
+            response = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a marketing expert who analyzes product descriptions and provides actionable feedback."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=200,
+                temperature=0.3
+            )
+            
+            result_text = response.choices[0].message.content.strip()
+            
+            # Parse JSON from response
+            import re
+            json_match = re.search(r'({[\s\S]*})', result_text)
+            if json_match:
+                json_str = json_match.group(1)
+                try:
+                    result = json.loads(json_str)
+                    return jsonify({"analysis": result})
+                except json.JSONDecodeError:
+                    print("Failed to parse JSON from OpenAI response")
+        
+        except Exception as e:
+            print(f"Error using OpenAI for text analysis: {str(e)}")
+            # Fall back to simple analysis
         
         # Simple text analysis fallback
         word_count = len(text.split())
