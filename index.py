@@ -27,6 +27,8 @@ from functions.storefront_notifications import storefront_notifications_bp
 from functions.storefront_followers import storefront_followers_bp
 from functions.storefront_reviews import storefront_reviews_bp
 from functions.ai_services import  ai_services_bp
+from functions.storefront_background import storefront_background_bp
+from functions.storefront_effects import storefront_effects_bp
 import pymysql
 from extensions.extensions import get_db_connection
 
@@ -248,6 +250,8 @@ app.register_blueprint(storefront_notifications_bp, url_prefix="/notifications")
 app.register_blueprint(storefront_followers_bp, url_prefix="/storefront/followers")
 app.register_blueprint(storefront_reviews_bp, url_prefix="/storefront/reviews")
 app.register_blueprint(ai_services_bp, url_prefix="/ai")
+app.register_blueprint(storefront_background_bp, url_prefix="/storefront/background")
+app.register_blueprint(storefront_effects_bp, url_prefix="/storefront/effects")
 
 if __name__ == "__main__":
     # print(app.url_map)
