@@ -31,3 +31,5 @@ openai
 Pillow
 
 numpy
+
+google.generativeai
