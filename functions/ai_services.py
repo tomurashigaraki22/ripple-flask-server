@@ -70,8 +70,8 @@ def estimate_from_image_ai(image_data, title="", description=""):
         
         # Create prompt with context
         prompt = f"""
-        Analyze this product image and estimate its physical dimensions (length, width, height in inches) 
-        and weight (in pounds). 
+        Analyze this product image and estimate its physical dimensions (length, width, height in centimeter) 
+        and weight (in kilogram). 
         
         Product title: {title}
         Product description: {description}
