@@ -1,7 +1,77 @@
 from flask import Blueprint, jsonify, request
 from extensions.extensions import get_db_connection
+import pymysql
 
 escrows_bp = Blueprint("escrows", __name__)
+
+
+def ensure_carrier_id_column():
+    """
+    Automatically add carrier_id column to orders table if it doesn't exist.
+    Column specifications:
+    - Type: VARCHAR(255) (string)
+    - NOT NULL
+    - Default: 'se-3051222'
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        
+        # Check if carrier_id column exists
+        cursor.execute("""
+            SELECT COUNT(*) as column_count
+            FROM INFORMATION_SCHEMA.COLUMNS 
+            WHERE TABLE_SCHEMA = DATABASE() 
+            AND TABLE_NAME = 'orders' 
+            AND COLUMN_NAME = 'carrier_id'
+        """)
+        
+        result = cursor.fetchone()
+        carrier_id_exists = result['column_count'] if result else 0
+        
+        if carrier_id_exists == 0:
+            # Add the carrier_id column
+            cursor.execute("""
+                ALTER TABLE orders 
+                ADD COLUMN carrier_id VARCHAR(255) NOT NULL DEFAULT 'se-3051222'
+            """)
+            conn.commit()
+            print("Added carrier_id column to orders table")
+        else:
+            print("carrier_id column already exists in orders table")
+            
+        cursor.close()
+        conn.close()
+        
+    except Exception as e:
+        print(f"Error ensuring carrier_id column: {str(e)}")
+        # Try alternative approach - check if column exists by trying to select it
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT carrier_id FROM orders LIMIT 1")
+            cursor.close()
+            conn.close()
+            print("carrier_id column already exists (verified by select)")
+        except:
+            # Column doesn't exist, try to add it
+            try:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute("""
+                    ALTER TABLE orders 
+                    ADD COLUMN carrier_id VARCHAR(255) NOT NULL DEFAULT 'se-3051222'
+                """)
+                conn.commit()
+                cursor.close()
+                conn.close()
+                print("Added carrier_id column to orders table (alternative method)")
+            except Exception as alt_error:
+                print(f"Failed to add carrier_id column: {str(alt_error)}")
+
+
+# Call the function automatically when the module is imported
+ensure_carrier_id_column()
 
 
 @escrows_bp.route("/create", methods=["POST"])
@@ -25,6 +95,7 @@ def create_escrow():
         "buyerId": 1,                # optional, for orders table
         "orderType": "purchase",     # optional
         "shippingInfo": {...}        # optional
+        "carrierId": "se-3051222"    # optional, defaults to "se-3051222"
     }
     """
     try:
@@ -42,6 +113,7 @@ def create_escrow():
         buyer_id = data.get("buyerId")
         order_type = data.get("orderType", "purchase")
         shipping_info = data.get("shippingInfo")
+        carrier_id = data.get("carrierId", "se-3051222")  # Default to "se-3051222"
 
         if not seller or not buyer or not amount or not chain or not listing_id or not tx_hash:
             return jsonify({"success": False, "error": "Missing required fields"}), 400
@@ -79,7 +151,7 @@ def create_escrow():
         ))
         escrow_id = cursor.lastrowid
 
-        # Insert corresponding order
+        # Insert corresponding order with carrier_id
         cursor.execute("""
             INSERT INTO orders (
                 listing_id,
@@ -92,8 +164,9 @@ def create_escrow():
                 escrow_id,
                 payment_chain,
                 order_type,
+                carrier_id,
                 created_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
         """, (
             listing_id,
             buyer_id,
@@ -104,7 +177,8 @@ def create_escrow():
             shipping_info if shipping_info else None,
             escrow_id,
             chain,
-            order_type
+            order_type,
+            carrier_id
         ))
         order_id = cursor.lastrowid
 

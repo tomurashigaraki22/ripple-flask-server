@@ -5,15 +5,20 @@ import json
 import base64
 from io import BytesIO
 from PIL import Image
+import openai
 import numpy as np
 from extensions.extensions import get_db_connection
 import google.generativeai as genai
+from openai import OpenAI
 
 ai_services_bp = Blueprint("ai_services", __name__)
 
 # Configure Gemini API key (hardcoded as requested)
 GEMINI_API_KEY = "AIzaSyBrEffEkJw_KFY2XDHWRt0B3jmobfLmAQE"
 genai.configure(api_key=GEMINI_API_KEY)
+
+# Configure OpenAI client
+openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 @ai_services_bp.route("/estimate-dimensions", methods=["POST"])
 def estimate_dimensions():
@@ -316,7 +321,7 @@ def analyze_text():
             
             Text to analyze: {text}"""
             
-            response = openai.ChatCompletion.create(
+            response = openai_client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
                     {"role": "system", "content": "You are a marketing expert who analyzes product descriptions and provides actionable feedback."},
@@ -371,3 +376,277 @@ def analyze_text():
     except Exception as e:
         print(f"Error analyzing text: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
+
+@ai_services_bp.route("/pickup-address-suggestions", methods=["POST"])
+def get_pickup_address_suggestions():
+    """Get pickup location suggestions using Gemini"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+        
+        # Extract location parameters
+        country = data.get('country', '')
+        state = data.get('state', '')
+        city = data.get('city', '')
+        street = data.get('street', '')
+        
+        # Validate required fields
+        if not all([country, state, city, street]):
+            return jsonify({"error": "Missing required fields: country, state, city, street"}), 400
+        
+        try:
+            # Create prompt for Gemini based on country
+            if country.lower() in ['usa', 'united states', 'us']:
+                # For US addresses, look for USPS and UPS locations
+                prompt = f"""Find the closest USPS Priority Mail and UPS pickup locations to this address:
+                Street: {street}
+                City: {city}
+                State: {state}
+                Country: {country}
+                
+                Please provide 3-5 nearby pickup locations that accept packages. Include:
+                - USPS Post Offices and Priority Mail locations
+                - UPS Stores and pickup points
+                - FedEx locations
+                
+                Include the following information for each location:
+                - Location name/type (Post Office, UPS Store, FedEx Office, etc.)
+                - Full address
+                - Distance from the given address (approximate)
+                - Operating hours (if known)
+                - Phone number (if available)
+                
+                Return ONLY a JSON object with the following format:
+                {{
+                    "pickup_locations": [
+                        {{
+                            "name": "string",
+                            "address": "string",
+                            "distance": "string",
+                            "hours": "string",
+                            "phone": "string"
+                        }}
+                    ]
+                }}"""
+            else:
+                # For international addresses, look for local postal services and courier services
+                prompt = f"""Find the closest postal service and courier pickup locations to this address:
+                Street: {street}
+                City: {city}
+                State: {state}
+                Country: {country}
+                
+                Please provide 3-5 nearby pickup locations for shipping packages internationally. Include:
+                - Local postal service offices (like NIPOST for Nigeria)
+                - International courier services (FedEx, UPS)
+                - Global Post service points
+                - Other shipping service providers
+                
+                Include the following information for each location:
+                - Location name/type (Post Office, Global Post Service Point, etc.)
+                - Full address
+                - Distance from the given address (approximate)
+                - Operating hours (if known)
+                - Phone number (if available)
+                - Services offered (international shipping, express delivery, etc.)
+                
+                Return ONLY a JSON object with the following format:
+                {{
+                    "pickup_locations": [
+                        {{
+                            "name": "string",
+                            "address": "string",
+                            "distance": "string",
+                            "hours": "string",
+                            "phone": "string",
+                            "services": "string"
+                        }}
+                    ]
+                }}"""
+            
+            # Set up the Gemini model
+            model = genai.GenerativeModel('gemini-2.5-flash')
+            
+            # Call Gemini API
+            response = model.generate_content(prompt)
+            
+            result_text = response.text
+            print(f"Gemini response: {result_text}")  # Debug log
+            
+            # Parse JSON from response
+            import re
+            json_match = re.search(r'({[\s\S]*})', result_text)
+            if json_match:
+                json_str = json_match.group(1)
+                try:
+                    result = json.loads(json_str)
+                    
+                    # Add carrier_id to each pickup location based on the service type
+                    if 'pickup_locations' in result:
+                        for location in result['pickup_locations']:
+                            location['carrier_id'] = determine_carrier_id(location.get('name', ''))
+                    
+                    # Log the request for analytics
+                    try:
+                        log_pickup_suggestion_request(country, state, city, street, result)
+                    except Exception as e:
+                        print(f"Warning: Could not log pickup suggestion request: {str(e)}")
+                    
+                    return jsonify(result)
+                except json.JSONDecodeError as e:
+                    print(f"Failed to parse JSON from Gemini response: {e}")
+                    print(f"Raw response: {result_text}")
+                    return jsonify({"error": "Failed to parse AI response"}), 500
+            else:
+                print(f"No JSON found in response: {result_text}")
+                return jsonify({"error": "Invalid response format from AI"}), 500
+                
+        except Exception as e:
+            print(f"Error using Gemini for pickup suggestions: {str(e)}")
+            # Fallback to generic suggestions
+            return get_fallback_pickup_suggestions(country, state, city, street)
+    
+    except Exception as e:
+        print(f"Error getting pickup address suggestions: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
+
+def determine_carrier_id(location_name):
+    """Determine carrier_id based on location name/type"""
+    location_name_lower = location_name.lower()
+    
+    # FedEx related - se-3051224
+    if any(keyword in location_name_lower for keyword in ['fedex', 'fed ex', 'red star express']):
+        return 'se-3051224'
+    
+    # UPS or USPS related - se-3051222  
+    elif any(keyword in location_name_lower for keyword in ['ups', 'usps', 'post office', 'postal', 'nipost']):
+        return 'se-3051222'
+    
+    # Global Post related - se-3051223 (including DHL since we can't control Gemini completely)
+    elif any(keyword in location_name_lower for keyword in ['global post', 'globalpost', 'dhl', 'aramex']):
+        return 'se-3051223'
+    
+    # Default to USPS/UPS carrier for unknown services
+    else:
+        return 'se-3051222'
+
+def get_fallback_pickup_suggestions(country, state, city, street):
+    """Fallback pickup suggestions when AI service is unavailable"""
+    try:
+        if country.lower() in ['usa', 'united states', 'us']:
+            # US-specific fallback locations
+            fallback_locations = [
+                {
+                    "name": f"{city} Main Post Office",
+                    "address": f"Main Street, {city}, {state}",
+                    "distance": "1-3 miles",
+                    "hours": "Monday-Friday: 9:00 AM - 5:00 PM, Saturday: 9:00 AM - 1:00 PM",
+                    "phone": "Call 1-800-ASK-USPS for local number",
+                    "carrier_id": "se-3051222"
+                },
+                {
+                    "name": f"{city} Post Office Branch",
+                    "address": f"Downtown {city}, {state}",
+                    "distance": "2-4 miles", 
+                    "hours": "Monday-Friday: 9:00 AM - 5:00 PM",
+                    "phone": "Call 1-800-ASK-USPS for local number",
+                    "carrier_id": "se-3051222"
+                },
+                {
+                    "name": "UPS Store (USPS Services)",
+                    "address": f"Shopping Center, {city}, {state}",
+                    "distance": "1-5 miles",
+                    "hours": "Monday-Friday: 8:00 AM - 7:00 PM, Saturday: 9:00 AM - 5:00 PM",
+                    "phone": "Contact local UPS Store",
+                    "carrier_id": "se-3051222"
+                }
+            ]
+        else:
+            # International fallback locations
+            fallback_locations = [
+                {
+                    "name": f"{city} Main Post Office",
+                    "address": f"Central {city}, {state}, {country}",
+                    "distance": "2-5 km",
+                    "hours": "Monday-Friday: 8:00 AM - 4:00 PM",
+                    "phone": "Contact local postal service",
+                    "services": "International shipping, express delivery",
+                    "carrier_id": "se-3051222"
+                },
+                {
+                    "name": "Global Post Service Point",
+                    "address": f"Commercial District, {city}, {state}",
+                    "distance": "3-7 km",
+                    "hours": "Monday-Friday: 9:00 AM - 6:00 PM, Saturday: 9:00 AM - 2:00 PM",
+                    "phone": "Contact Global Post customer service",
+                    "services": "International express delivery",
+                    "carrier_id": "se-3051223"
+                },
+                {
+                    "name": "FedEx Office",
+                    "address": f"Business Area, {city}, {state}",
+                    "distance": "2-6 km",
+                    "hours": "Monday-Friday: 8:00 AM - 7:00 PM",
+                    "phone": "Contact FedEx customer service",
+                    "services": "International shipping, document services",
+                    "carrier_id": "se-3051224"
+                }
+            ]
+        
+        return jsonify({
+            "pickup_locations": fallback_locations,
+            "note": "These are generic suggestions. Please verify locations and hours before visiting."
+        })
+        
+    except Exception as e:
+        print(f"Error in fallback pickup suggestions: {str(e)}")
+        return jsonify({"error": "Unable to provide pickup suggestions"}), 500
+
+def log_pickup_suggestion_request(country, state, city, street, suggestions):
+    """Log pickup suggestion requests to database for tracking and analytics"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            print("Warning: No database connection available")
+            return
+            
+        cursor = conn.cursor()
+        
+        # Create table if it doesn't exist
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS pickup_suggestion_requests (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                country VARCHAR(100),
+                state VARCHAR(100),
+                city VARCHAR(100),
+                street VARCHAR(255),
+                suggestions_count INT,
+                suggestions JSON,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+        
+        # Insert the request data
+        suggestions_count = len(suggestions.get('pickup_locations', []))
+        cursor.execute("""
+            INSERT INTO pickup_suggestion_requests 
+            (country, state, city, street, suggestions_count, suggestions, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, NOW())
+        """, (
+            country, 
+            state, 
+            city, 
+            street, 
+            suggestions_count,
+            json.dumps(suggestions)
+        ))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+    except Exception as e:
+        print(f"Error logging pickup suggestion request: {str(e)}")
+        # Don't raise the exception as this is just logging
