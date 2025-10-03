@@ -17,8 +17,17 @@ ai_services_bp = Blueprint("ai_services", __name__)
 GEMINI_API_KEY = "AIzaSyBrEffEkJw_KFY2XDHWRt0B3jmobfLmAQE"
 genai.configure(api_key=GEMINI_API_KEY)
 
-# Configure OpenAI client
-openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Configure OpenAI client (only if API key is available)
+try:
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+    if openai_api_key:
+        openai_client = OpenAI(api_key=openai_api_key)
+    else:
+        openai_client = None
+        print("Warning: OPENAI_API_KEY not set. OpenAI features will be disabled.")
+except Exception as e:
+    openai_client = None
+    print(f"Warning: Failed to initialize OpenAI client: {str(e)}")
 
 @ai_services_bp.route("/estimate-dimensions", methods=["POST"])
 def estimate_dimensions():
@@ -310,7 +319,10 @@ def analyze_text():
         text = data['text']
         
         try:
-            # Use OpenAI for text analysis
+            # Use OpenAI for text analysis (only if client is available)
+            if openai_client is None:
+                raise Exception("OpenAI client not available")
+                
             prompt = f"""Analyze this product description and provide:
             1. Word count
             2. Sentiment analysis (positive, neutral, negative)
@@ -346,6 +358,7 @@ def analyze_text():
         
         except Exception as e:
             print(f"Error using OpenAI for text analysis: {str(e)}")
+            # Fall back to simple analysis
             # Fall back to simple analysis
         
         # Simple text analysis fallback
