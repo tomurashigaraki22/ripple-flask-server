@@ -1,6 +1,8 @@
 from flask import Blueprint, jsonify, request
 from extensions.extensions import get_db_connection
 import pymysql
+import json
+import uuid
 
 escrows_bp = Blueprint("escrows", __name__)
 
@@ -102,61 +104,64 @@ def create_escrow():
         data = request.get_json()
 
         # Required fields
-        seller = data.get("seller")
+        seller = data.get("seller", "0xcwd219wd")
         buyer = data.get("buyer")
         amount = data.get("amount")
         chain = data.get("chain")
+        seller_id = data.get("seller_id")
+        buyer_id = data.get("buyer_id")
         conditions = data.get("conditions", {})
         listing_id = data.get("listingId")
         tx_hash = data.get("transactionHash")
         payment_verified = data.get("paymentVerified", False)
-        buyer_id = data.get("buyerId")
         order_type = data.get("orderType", "purchase")
         shipping_info = data.get("shippingInfo")
         carrier_id = data.get("carrierId", "se-3051222")  # Default to "se-3051222"
 
-        if not seller or not buyer or not amount or not chain or not listing_id or not tx_hash:
-            return jsonify({"success": False, "error": "Missing required fields"}), 400
+        if not seller or not buyer or not amount or not chain or not listing_id or not tx_hash or not buyer_id:
+            return jsonify({"success": False, "error": f"Missing required fields"}), 400
 
         conn = get_db_connection()
         cursor = conn.cursor()
 
+        # Generate a unique UUID for the escrow
+        escrow_id = str(uuid.uuid4())
+
         # Insert escrow
         cursor.execute("""
-            INSERT INTO escrow_accounts (
-                seller_address,
-                buyer_address,
+            INSERT INTO escrows (
+                id,
+                seller,
+                buyer,
                 amount,
                 chain,
-                delivery_required,
-                satisfactory_condition,
-                auto_release_days,
-                listing_id,
-                transaction_hash,
-                payment_verified,
-                status
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                fee,
+                conditions,
+                status,
+                transaction_hash
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
+            escrow_id,  # Using generated UUID as the escrow id
             seller,
             buyer,
             amount,
             chain,
-            conditions.get("delivery_required", True),
-            conditions.get("satisfactory_condition", True),
-            conditions.get("auto_release_days", 20),
-            listing_id,
-            tx_hash,
-            payment_verified,
-            "PENDING"
+            0.0,  # Default fee
+            json.dumps(conditions),  # Convert conditions dict to JSON string
+            "funded" if payment_verified else "pending",
+            tx_hash
         ))
-        escrow_id = cursor.lastrowid
 
         # Insert corresponding order with carrier_id
+        order_id = str(uuid.uuid4())  # Generate UUID for order
         cursor.execute("""
             INSERT INTO orders (
+                id,
                 listing_id,
                 buyer_id,
                 seller_id,
+                buyer_wallet,
+                seller_wallet,
                 amount,
                 transaction_hash,
                 status,
@@ -165,22 +170,25 @@ def create_escrow():
                 payment_chain,
                 order_type,
                 carrier_id,
-                created_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                shipping_info
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
+            order_id,  # Generated UUID for order id
             listing_id,
             buyer_id,
-            None,  # seller_id can be fetched if you track users separately
+            seller_id,  # Using seller_id from data
+            buyer,      # buyer_wallet
+            seller,     # seller_wallet  
             amount,
             tx_hash,
             "escrow_funded" if payment_verified else "pending",
-            shipping_info if shipping_info else None,
-            escrow_id,
+            json.dumps(shipping_info) if shipping_info else None,
+            escrow_id,  # Reference to the generated UUID
             chain,
             order_type,
-            carrier_id
+            carrier_id,
+            json.dumps(shipping_info) if shipping_info else None
         ))
-        order_id = cursor.lastrowid
 
         conn.commit()
         cursor.close()
@@ -203,7 +211,7 @@ def get_all_escrows():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM escrow_accounts ORDER BY id DESC")
+        cursor.execute("SELECT * FROM escrows ORDER BY created_at DESC")
         escrows = cursor.fetchall()
         cursor.close()
         conn.close()
@@ -216,12 +224,12 @@ def get_all_escrows():
 # ----------------------------
 # Get escrow details
 # ----------------------------
-@escrows_bp.route("/api/escrow/<int:escrow_id>", methods=["GET"])
+@escrows_bp.route("/api/escrow/<escrow_id>", methods=["GET"])
 def get_escrow_details(escrow_id):
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM escrow_accounts WHERE id = %s", (escrow_id,))
+        cursor.execute("SELECT * FROM escrows WHERE id = %s", (escrow_id,))
         escrow = cursor.fetchone()
         cursor.close()
         conn.close()

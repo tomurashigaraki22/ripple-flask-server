@@ -26,7 +26,7 @@ def verify_user_access(req):
     except jwt.InvalidTokenError:
         return {"error": "Invalid token", "status": 401}
 
-    user_id = decoded.get("userId")
+    user_id = decoded.get("userId") or decoded.get("id") or decoded.get("user_id")
     print(f"Decoded: {decoded}")
     if not user_id:
         return {"error": "Invalid token payload", "status": 401}
