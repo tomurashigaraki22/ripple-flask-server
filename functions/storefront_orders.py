@@ -177,7 +177,7 @@ def get_orders():
 
         query = """
             SELECT o.*, l.title AS listing_title, l.images AS listing_images, l.price AS listing_price,
-                   seller.username AS seller_username
+                   l.shipping_from AS listing_shipping_from, seller.username AS seller_username
             FROM orders o
             JOIN listings l ON o.listing_id = l.id
             JOIN users seller ON o.seller_id = seller.id
@@ -208,6 +208,11 @@ def get_orders():
                 order["listing_images"] = json.loads(order["listing_images"])
             if isinstance(order.get("shipping_address"), str):
                 order["shipping_address"] = json.loads(order["shipping_address"])
+            if isinstance(order.get("listing_shipping_from"), str):
+                try:
+                    order["listing_shipping_from"] = json.loads(order["listing_shipping_from"])
+                except Exception:
+                    order["listing_shipping_from"] = None
 
         cursor.close()
         conn.close()

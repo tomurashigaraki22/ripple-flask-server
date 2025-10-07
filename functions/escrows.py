@@ -72,7 +72,6 @@ def ensure_carrier_id_column():
                 print(f"Failed to add carrier_id column: {str(alt_error)}")
 
 
-# Call the function automatically when the module is imported
 ensure_carrier_id_column()
 
 
@@ -119,7 +118,7 @@ def create_escrow():
         carrier_id = data.get("carrierId", "se-3051222")  # Default to "se-3051222"
 
         if not seller or not buyer or not amount or not chain or not listing_id or not tx_hash or not buyer_id:
-            return jsonify({"success": False, "error": f"Missing required fields"}), 400
+            return jsonify({"success": False, "error": f"Missing required fields: {seller} {buyer} {amount} {chain} {listing_id} {tx_hash} {buyer_id}"}), 400
 
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -203,9 +202,7 @@ def create_escrow():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
-# ----------------------------
-# Get all escrows
-# ----------------------------
+
 @escrows_bp.route("/api/escrows", methods=["GET"])
 def get_all_escrows():
     try:
@@ -221,9 +218,7 @@ def get_all_escrows():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-# ----------------------------
-# Get escrow details
-# ----------------------------
+
 @escrows_bp.route("/api/escrow/<escrow_id>", methods=["GET"])
 def get_escrow_details(escrow_id):
     try:
