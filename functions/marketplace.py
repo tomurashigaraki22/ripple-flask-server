@@ -22,22 +22,35 @@ def get_marketplace_listings():
         where_clause = 'WHERE l.status = "approved" AND l.status != "sold"' 
         query_params = [] 
 
+        print(f"Category: {category} {subcategory} {chain} {is_physical} {search} {sort_by} {price_range}")
+
         # Handle category filtering
-        if category and category != "all": 
-            where_clause += " AND l.category = %s" 
-            query_params.append(category)
+        if category and category != "all":
+            category_lower = category.lower()
+            
+            # Handle physical/digital as category filters
+            if category_lower == "physical":
+                where_clause += " AND l.is_physical = %s"
+                query_params.append(1)
+            elif category_lower == "digital":
+                where_clause += " AND l.is_physical = %s"
+                query_params.append(0)
+            else:
+                # Handle actual categories like "electronics", "fashion", "nft", etc.
+                where_clause += " AND l.category = %s"
+                query_params.append(category_lower)
 
         # Handle subcategory filtering
         if subcategory and subcategory != "all":
-            where_clause += " AND l.subcategory = %s"
-            query_params.append(subcategory)
+            where_clause += " AND (l.subcategory = %s OR l.category = %s)"
+            query_params.extend([subcategory.lower(), subcategory.lower()])
 
         # Handle chain filtering
         if chain and chain != "all": 
             where_clause += " AND l.chain = %s" 
-            query_params.append(chain) 
+            query_params.append(chain.lower())
 
-        # Handle physical/digital filtering
+        # Handle physical/digital filtering (from isPhysical parameter)
         if is_physical and is_physical.lower() != "all": 
             is_physical_value = 1 if is_physical.lower() == "physical" else 0
             where_clause += " AND l.is_physical = %s" 
@@ -59,7 +72,7 @@ def get_marketplace_listings():
                     pass
 
         # Handle search filtering
-        if search: 
+        if search and search.strip(): 
             where_clause += " AND (l.title LIKE %s OR l.description LIKE %s)" 
             query_params.extend([f"%{search}%", f"%{search}%"]) 
 
