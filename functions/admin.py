@@ -98,8 +98,8 @@ def grant_membership():
         active_membership = cursor.fetchone()
 
         if active_membership:
-            # Increment expiry date
-            new_expires_at = active_membership["expires_at"] + timedelta(days=30*int(months))
+            # Always calculate from current date, not from old expiry date
+            new_expires_at = datetime.utcnow() + timedelta(days=30*int(months))
             cursor.execute(
                 "UPDATE user_memberships SET expires_at = %s WHERE id = %s",
                 (new_expires_at, active_membership["id"])
