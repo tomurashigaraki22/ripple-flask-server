@@ -11,56 +11,37 @@ def get_marketplace_listings():
         page = int(request.args.get("page", 1)) 
         offset = (page - 1) * limit 
         category = request.args.get("category") 
-        subcategory = request.args.get("subcategory")  # Add subcategory parameter
+        subcategory = request.args.get("subcategory")
         chain = request.args.get("chain") 
         is_physical = request.args.get("isPhysical") 
         search = request.args.get("search") 
         sort_by = request.args.get("sortBy", "recent") 
         price_range = request.args.get("priceRange")
 
-        # Base query 
+        # Base query - start with approved and not sold listings
         where_clause = 'WHERE l.status = "approved" AND l.status != "sold"' 
         query_params = [] 
 
-        # Handle category and subcategory filtering
+        # Handle category filtering
         if category and category != "all": 
-            where_clause += " OR l.category = %s" 
+            where_clause += " AND l.category = %s" 
             query_params.append(category)
-            
-            # Add subcategory filtering if provided
-            if subcategory and subcategory != "all":
-                where_clause += " AND l.subcategory = %s"
-                query_params.append(subcategory)
 
+        # Handle subcategory filtering
+        if subcategory and subcategory != "all":
+            where_clause += " AND l.subcategory = %s"
+            query_params.append(subcategory)
+
+        # Handle chain filtering
         if chain and chain != "all": 
             where_clause += " AND l.chain = %s" 
             query_params.append(chain) 
 
+        # Handle physical/digital filtering
         if is_physical and is_physical.lower() != "all": 
-            print(f"Yes: {is_physical}")
             is_physical_value = 1 if is_physical.lower() == "physical" else 0
-            where_clause += f" AND l.is_physical = {is_physical_value}" 
-            
-            # Check for specific categories and normalize them
-            categories = ["Electronics", "Fashion", "Jewelry", "Collectibles", "Art", "Beauty", 
-                         "Food & Drink", "Accessories", "Toys", "Furniture", "Books", 
-                         "Home & Garden", "Health And Beauty"]
-            
-            category_conditions = []
-            for cat in categories:
-                normalized_cat = cat.lower()
-                if " & " in normalized_cat:
-                    normalized_cat = normalized_cat.replace(" & ", "-")
-                if " and " in normalized_cat:
-                    normalized_cat = normalized_cat.replace(" and ", "-")
-                if " " in normalized_cat:
-                    normalized_cat = normalized_cat.replace(" ", "-")
-                
-                category_conditions.append(f"l.category = '{normalized_cat}'")
-            
-            if category_conditions:
-                where_clause += f" AND ({' OR '.join(category_conditions)})"
-                print(f"Where Calu: {where_clause}") 
+            where_clause += " AND l.is_physical = %s" 
+            query_params.append(is_physical_value)
 
         # Add price range filtering 
         if price_range and price_range != "all": 
@@ -69,10 +50,15 @@ def get_marketplace_listings():
                 query_params.append(1000) 
             else: 
                 # Handle ranges like "0-50", "50-200", etc. 
-                price_min, price_max = map(float, price_range.split("-")) 
-                where_clause += " AND l.price >= %s AND l.price <= %s" 
-                query_params.extend([price_min, price_max]) 
+                try:
+                    price_min, price_max = map(float, price_range.split("-")) 
+                    where_clause += " AND l.price >= %s AND l.price <= %s" 
+                    query_params.extend([price_min, price_max])
+                except ValueError:
+                    # Invalid price range format, skip this filter
+                    pass
 
+        # Handle search filtering
         if search: 
             where_clause += " AND (l.title LIKE %s OR l.description LIKE %s)" 
             query_params.extend([f"%{search}%", f"%{search}%"]) 
@@ -97,7 +83,7 @@ def get_marketplace_listings():
                 l.description, 
                 l.price, 
                 l.category, 
-                l.subcategory,  # Add subcategory to the SELECT statement
+                l.subcategory,
                 l.chain, 
                 l.is_physical, 
                 l.images, 
