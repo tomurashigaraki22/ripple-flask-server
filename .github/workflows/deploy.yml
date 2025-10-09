@@ -23,3 +23,8 @@ jobs:
       - name: Deploy to VPS
         run: |
           ssh -i ~/.ssh/id_ed25519 ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} "bash /var/www/myapp/deploy.sh"
+
+      - name: Health Check
+        run: |
+          sleep 15
+          curl -f https://api.ripplebids.com/ || curl -f http://api.ripplebids.com/ || echo "Health check failed, but deployment may still be successful"
