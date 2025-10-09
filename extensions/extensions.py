@@ -24,6 +24,7 @@ ISSUER_ADDRESS = "rsEaYfqdZKNbD3SK55xzcjPm3nDrMj4aUT"        # issuer of XRPB
 # ✅ Database connection
 def get_db_connection():
     try:
+        print(f"Trying connection")
         connection = pymysql.connect(
             host=os.getenv("DB_HOST", "localhost"),
             user=os.getenv("DB_USER", "root"),
