@@ -13,8 +13,31 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# ✅ Allow all origins for CORS
-CORS(app, resources={r"/*": {"origins": "*"}})
+# ✅ Restrict CORS to only allow ripplebids.com and its subdomains
+allowed_origins = [
+    "https://ripplebids.com",
+    "https://www.ripplebids.com",
+    "https://*.ripplebids.com",  # This allows all subdomains
+    "http://localhost:3000",     # For local development
+    "http://localhost:3001",     # For local development
+]
+
+# For production, use only ripplebids.com domains
+if os.getenv("FLASK_ENV") == "production":
+    allowed_origins = [
+        "https://ripplebids.com",
+        "https://www.ripplebids.com",
+        "https://*.ripplebids.com"
+    ]
+
+CORS(app, resources={
+    r"/*": {
+        "origins": allowed_origins,
+        "methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
+        "supports_credentials": True
+    }
+})
 
 client = JsonRpcClient("https://s.altnet.rippletest.net:51234")
 
