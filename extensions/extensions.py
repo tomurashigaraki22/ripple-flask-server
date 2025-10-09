@@ -13,8 +13,18 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# ✅ Allow all origins for CORS
-CORS(app, resources={r"/*": {"origins": "*"}})
+# ✅ Updated CORS configuration for api.ripplebids.com
+CORS(app, resources={
+    r"/*": {
+        "origins": [
+            "https://ripplebids.com",
+            "https://www.ripplebids.com", 
+            "https://api.ripplebids.com",
+            "http://localhost:3000",  # For development
+            "http://127.0.0.1:3000"   # For development
+        ]
+    }
+})
 
 client = JsonRpcClient("https://s.altnet.rippletest.net:51234")
 
