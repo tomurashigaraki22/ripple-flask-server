@@ -128,6 +128,7 @@ def dump_database():
     """Generate database dump and email it"""
     try:
         conn = get_db_connection()
+        print("Testing")
         if not conn:
             return jsonify({"error": "Database connection failed"}), 500
             
