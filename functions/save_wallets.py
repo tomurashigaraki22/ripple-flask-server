@@ -1,4 +1,4 @@
-from extensions.extensions import get_db_connection, mail, Message
+from extensions.extensions import get_db_connection
 from flask import Blueprint, jsonify, request, make_response
 import pymysql
 import jwt
@@ -6,14 +6,13 @@ import os
 
 save_wallets_bp = Blueprint("save_wallets", __name__)
 
+# ------------------ AUTH CHECK ------------------
 def verify_user_access(req):
     auth_header = req.headers.get("Authorization")
-
     if not auth_header or not auth_header.startswith("Bearer "):
         return {"error": "Missing or invalid authorization header", "status": 401}
 
     token = auth_header.split(" ")[1]
-
     try:
         decoded = jwt.decode(token, os.getenv("JWT_SECRET"), algorithms=["HS256"])
     except jwt.ExpiredSignatureError:
@@ -41,7 +40,7 @@ def verify_user_access(req):
         print("DB error in verify_user_access:", e)
         return {"error": "Internal server error", "status": 500}
 
-
+# ------------------ TABLE CREATION ------------------
 def create_wallets_table():
     try:
         conn = get_db_connection()
@@ -65,11 +64,10 @@ def create_wallets_table():
         conn.close()
     except Exception as e:
         print("DB error in create_wallets_table:", e)
-        return {"error": "Internal server error", "status": 500}
 
 create_wallets_table()
 
-
+# ------------------ SAVE WALLET ROUTE ------------------
 @save_wallets_bp.route("/save-wallet", methods=["POST"])
 def saveWalletsForUser():
     try:
@@ -80,7 +78,7 @@ def saveWalletsForUser():
         user_id = auth_result["user"]["id"]
         data = request.json
 
-        # Extract possible wallet fields
+        # Extract wallet data
         sui_address = data.get("sui_address")
         sui_enc_key = data.get("sui_enc_key")
         evm_address = data.get("evm_address")
@@ -93,11 +91,9 @@ def saveWalletsForUser():
         conn = get_db_connection()
         cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-        # Check if wallet row exists
+        # Ensure user row exists in wallets
         cursor.execute("SELECT * FROM wallets WHERE user_id = %s", (user_id,))
         wallet = cursor.fetchone()
-
-        # Create an empty wallet row if none exists yet
         if not wallet:
             cursor.execute("INSERT INTO wallets (user_id) VALUES (%s)", (user_id,))
             conn.commit()
@@ -107,38 +103,34 @@ def saveWalletsForUser():
         updates = []
         values = []
 
-        # Check each type individually
+        # Handle each wallet individually
         if sui_address and sui_enc_key:
-            if wallet["sui_address"] is not None:
+            if wallet["sui_address"]:
                 conn.close()
                 return make_response(jsonify({"error": "Sui wallet already exists for this user"}), 409)
-            updates.append("sui_address = %s")
-            updates.append("sui_enc_key = %s")
-            values.extend([sui_address, sui_enc_key])
+            updates += ["sui_address = %s", "sui_enc_key = %s"]
+            values += [sui_address, sui_enc_key]
 
         if evm_address and evm_enc_key:
-            if wallet["evm_address"] is not None:
+            if wallet["evm_address"]:
                 conn.close()
                 return make_response(jsonify({"error": "EVM wallet already exists for this user"}), 409)
-            updates.append("evm_address = %s")
-            updates.append("evm_enc_key = %s")
-            values.extend([evm_address, evm_enc_key])
+            updates += ["evm_address = %s", "evm_enc_key = %s"]
+            values += [evm_address, evm_enc_key]
 
         if sol_address and sol_enc_key:
-            if wallet["sol_address"] is not None:
+            if wallet["sol_address"]:
                 conn.close()
                 return make_response(jsonify({"error": "Solana wallet already exists for this user"}), 409)
-            updates.append("sol_address = %s")
-            updates.append("sol_enc_key = %s")
-            values.extend([sol_address, sol_enc_key])
+            updates += ["sol_address = %s", "sol_enc_key = %s"]
+            values += [sol_address, sol_enc_key]
 
         if xrp_address and xrp_enc_key:
-            if wallet["xrp_address"] is not None:
+            if wallet["xrp_address"]:
                 conn.close()
                 return make_response(jsonify({"error": "XRP wallet already exists for this user"}), 409)
-            updates.append("xrp_address = %s")
-            updates.append("xrp_enc_key = %s")
-            values.extend([xrp_address, xrp_enc_key])
+            updates += ["xrp_address = %s", "xrp_enc_key = %s"]
+            values += [xrp_address, xrp_enc_key]
 
         if not updates:
             conn.close()
@@ -156,7 +148,7 @@ def saveWalletsForUser():
         print("Error in saveWalletsForUser:", e)
         return make_response(jsonify({"error": "Internal server error"}), 500)
 
-
+# ------------------ GET WALLET ROUTE ------------------
 @save_wallets_bp.route("/get-wallet", methods=["GET"])
 def getWalletsForUser():
     try:
