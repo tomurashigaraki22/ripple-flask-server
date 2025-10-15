@@ -13,7 +13,6 @@ load_dotenv()
 
 app = Flask(__name__)
 
-✅ Updated CORS configuration for api.ripplebids.com
 CORS(app, resources={
     r"/*": {
         "origins": [
