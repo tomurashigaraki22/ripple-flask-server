@@ -44,7 +44,72 @@ def verify_user_access(req):
 def create_wallets_table():
     try:
         conn = get_db_connection()
+        if conn is None:
+            print("❌ Cannot create wallets table: Database connection failed")
+            return False
+            
         cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS wallets (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id VARCHAR(255) NOT NULL UNIQUE,
+                sui_address TEXT DEFAULT NULL,
+                sui_enc_key TEXT DEFAULT NULL,
+                evm_address TEXT DEFAULT NULL,
+                evm_enc_key TEXT DEFAULT NULL,
+                sol_address TEXT DEFAULT NULL,
+                sol_enc_key TEXT DEFAULT NULL,
+                xrp_address TEXT DEFAULT NULL,
+                xrp_enc_key TEXT DEFAULT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        """)
+        conn.commit()
+        conn.close()
+        print("✅ Wallets table created successfully")
+        return True
+    except Exception as e:
+        print("❌ DB error in create_wallets_table:", e)
+        return False
+
+# Call the function but don't fail silently
+table_created = create_wallets_table()
+if not table_created:
+    print("⚠️ Warning: Wallets table creation failed. The table will be created when database connection is available.")
+
+
+# ------------------ SAVE WALLET ROUTE ------------------
+@save_wallets_bp.route("/save-wallet", methods=["POST"])
+def saveWalletsForUser():
+    try:
+        auth_result = verify_user_access(request)
+        if "user" not in auth_result:
+            return make_response(jsonify({"error": auth_result.get("error", "Unauthorized")}), auth_result.get("status", 401))
+
+        user_id = auth_result["user"]["id"]
+        data = request.json
+
+        if not data:
+            return make_response(jsonify({"error": "No data provided"}), 400)
+        print(f"Data: {data}")
+
+        # Extract wallet data
+        sui_address = data.get("sui_address")
+        sui_enc_key = data.get("sui_enc_key")
+        evm_address = data.get("evm_address")
+        evm_enc_key = data.get("evm_enc_key")
+        sol_address = data.get("sol_address")
+        sol_enc_key = data.get("sol_enc_key")
+        xrp_address = data.get("xrp_address")
+        xrp_enc_key = data.get("xrp_enc_key")
+
+        conn = get_db_connection()
+        if conn is None:
+            return make_response(jsonify({"error": "Database connection failed"}), 500)
+            
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+        # Ensure wallets table exists
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS wallets (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -60,36 +125,6 @@ def create_wallets_table():
                 FOREIGN KEY (user_id) REFERENCES users(id)
             )
         """)
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        print("DB error in create_wallets_table:", e)
-
-create_wallets_table()
-
-# ------------------ SAVE WALLET ROUTE ------------------
-@save_wallets_bp.route("/save-wallet", methods=["POST"])
-def saveWalletsForUser():
-    try:
-        auth_result = verify_user_access(request)
-        if "user" not in auth_result:
-            return make_response(jsonify({"error": auth_result.get("error", "Unauthorized")}), auth_result.get("status", 401))
-
-        user_id = auth_result["user"]["id"]
-        data = request.json
-
-        # Extract wallet data
-        sui_address = data.get("sui_address")
-        sui_enc_key = data.get("sui_enc_key")
-        evm_address = data.get("evm_address")
-        evm_enc_key = data.get("evm_enc_key")
-        sol_address = data.get("sol_address")
-        sol_enc_key = data.get("sol_enc_key")
-        xrp_address = data.get("xrp_address")
-        xrp_enc_key = data.get("xrp_enc_key")
-
-        conn = get_db_connection()
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
 
         # Ensure user row exists in wallets
         cursor.execute("SELECT * FROM wallets WHERE user_id = %s", (user_id,))
